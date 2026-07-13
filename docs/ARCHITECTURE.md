@@ -1,6 +1,6 @@
 # Architecture
 
-> Status: Step 2 (database models & migrations) complete. This document is updated as each
+> Status: Step 3 (YouTube metadata extraction) complete. This document is updated as each
 > subsequent build step lands — see [CHANGELOG.md](../CHANGELOG.md).
 
 ## 1. System overview
@@ -64,6 +64,13 @@ business logic testable without spinning up FastAPI or a real database.
 
 ## 3. Data flow: summarize a video (high level)
 
+0. `GET /api/v1/video?url=...` validates the URL (`app/utils/youtube.py`) and
+   returns metadata, fetched via **yt-dlp** (`app/services/metadata_service.py`)
+   rather than the official YouTube Data API — this avoids requiring a Google
+   Cloud project/API key/quota just to try the app. Videos are deduplicated
+   by `youtube_video_id`, so re-submitting the same URL reuses the stored row
+   instead of re-fetching. This step runs synchronously (metadata fetch is
+   fast); only transcript + summarization is pushed to a background job.
 1. `POST /api/v1/summarize` validates the URL and enqueues a Celery job (long
    transcripts can take minutes to process — never block the request thread).
 2. Worker pipeline: fetch metadata → fetch transcript → chunk transcript →

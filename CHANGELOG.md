@@ -5,6 +5,24 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added — Step 3: YouTube URL validation + metadata extraction
+- `app/utils/youtube.py`: `extract_video_id()` supporting `/watch?v=`,
+  `youtu.be/`, `/shorts/`, `/embed/`, and `/live/` URL shapes (with or
+  without extra query params), raising `ValidationAppError` for anything
+  else so invalid input fails before any network call.
+- `app/services/metadata_service.py`: fetches title, thumbnail, duration,
+  channel name, upload date, view count, and description via **yt-dlp**
+  (no YouTube Data API key required), run off the event loop with
+  `asyncio.to_thread` since yt-dlp is a blocking call. Wraps `DownloadError`
+  (private/deleted/region-locked videos) as `ExternalServiceError`.
+- `app/repositories/video_repository.py` + `app/services/video_service.py`:
+  get-or-fetch-and-persist orchestration, deduplicating videos by
+  `youtube_video_id`.
+- `GET /api/v1/video?url=...` endpoint (`app/api/v1/endpoints/video.py`).
+- Tests: pure-logic URL parsing cases (11 shapes/rejections), a mocked
+  yt-dlp metadata-mapping test, and an API test with the DB dependency
+  overridden (no real Postgres needed) per `docs/SPEC.md`'s testing rules.
+
 ### Added — Step 2: Database models, schemas, Alembic migrations
 - SQLAlchemy 2.0 async models for all 13 tables: `User`, `Video`,
   `Transcript`, `Summary`, `ChatSession`, `ChatMessage`, `Flashcard`, `Quiz`,
