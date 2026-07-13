@@ -5,7 +5,7 @@ podcasts, interviews, tech talks, tutorials — into summaries, timestamped
 notes, flashcards, quizzes, mind maps, and a RAG-powered chat you can ask
 questions of.
 
-> **Status:** Step 1 of 15 complete (project scaffolding). See
+> **Status:** Step 2 of 15 complete (database models & migrations). See
 > [CHANGELOG.md](CHANGELOG.md) for what's landed and
 > [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the system design.
 
@@ -99,7 +99,7 @@ Tracked step-by-step; each step ships with working code, tests, and doc
 updates before moving to the next:
 
 1. ✅ Project scaffolding
-2. Database models & migrations
+2. ✅ Database models & migrations
 3. YouTube metadata extraction
 4. Transcript extraction (multi-language + translation)
 5. LLM provider abstraction layer

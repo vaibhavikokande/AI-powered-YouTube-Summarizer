@@ -1,6 +1,6 @@
 # Architecture
 
-> Status: Step 1 (project scaffolding) complete. This document is updated as each
+> Status: Step 2 (database models & migrations) complete. This document is updated as each
 > subsequent build step lands — see [CHANGELOG.md](../CHANGELOG.md).
 
 ## 1. System overview
@@ -99,9 +99,41 @@ Answer (streamed back to the client)
 
 ## 5. Database schema
 
-Documented in detail in Step 2 once models are implemented. Core entities:
-`User`, `Video`, `Transcript`, `Summary`, `ChatSession`, `ChatMessage`,
-`Flashcard`, `Quiz`, `Note`, `ShareLink`.
+Implemented in `backend/app/models/` (SQLAlchemy 2.0, `Mapped`/`mapped_column`
+style) and `backend/alembic/versions/0001_initial_schema.py`.
+
+```
+users ──< videos (created_by_user_id, nullable — anonymous summarize allowed)
+videos ──< transcripts        (one row per language fetched)
+videos ──< summaries          (one row per summary_type: short/medium/detailed/bullet)
+videos ──< flashcards
+videos ──< quizzes ──< quiz_questions
+videos ──< notes
+videos ──< chat_sessions ──< chat_messages
+videos ──< favorites >── users            (whole-video favorite, unique per user+video)
+videos ──< bookmarks >── users            (saved timestamp + optional note within a video)
+summaries ──< share_links     (token-based public share link, optional expiry)
+```
+
+Design notes:
+
+- **`Video` is deduplicated by `youtube_video_id`** (unique index) — summarizing
+  the same URL twice reuses the existing row rather than duplicating metadata.
+- **JSONB columns** (`transcripts.segments`, `summaries.key_takeaways`,
+  `summaries.timestamped_sections`, `summaries.topics`,
+  `quiz_questions.options`) hold structured LLM output that doesn't need its
+  own relational table — see `docs/SPEC.md` for the corresponding Pydantic
+  shapes.
+- **Enums are stored as `VARCHAR` + a `CHECK` constraint** (`native_enum=False`)
+  rather than native Postgres enum types, since adding a new enum value to a
+  native Postgres enum requires a non-transactional `ALTER TYPE`, which is
+  more disruptive than a migration that updates a `CHECK` constraint.
+- **`ON DELETE CASCADE`** from `videos` down to transcripts/summaries/etc., and
+  **`ON DELETE SET NULL`** from content back to `users`, so deleting a user
+  never silently deletes videos/summaries other users may also reference.
+- A single naming convention (`backend/app/db/base.py`) generates predictable
+  constraint/index names (e.g. `uq_favorites_user_video`,
+  `ck_summaries_summary_type`) so later migrations can reference them by name.
 
 ## 6. Deployment
 

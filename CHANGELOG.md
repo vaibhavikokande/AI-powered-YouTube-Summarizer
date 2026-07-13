@@ -5,6 +5,29 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added — Step 2: Database models, schemas, Alembic migrations
+- SQLAlchemy 2.0 async models for all 13 tables: `User`, `Video`,
+  `Transcript`, `Summary`, `ChatSession`, `ChatMessage`, `Flashcard`, `Quiz`,
+  `QuizQuestion`, `Note`, `ShareLink`, `Favorite`, `Bookmark`
+  (`backend/app/models/`).
+- Shared `UUIDPKMixin`/`TimestampMixin` and a naming convention on `Base`
+  (`backend/app/db/base.py`) so every constraint/index has a predictable,
+  referenceable name.
+- Async engine/session setup + `get_db` FastAPI dependency
+  (`backend/app/db/session.py`).
+- Pydantic v2 request/response schemas mirroring every model
+  (`backend/app/schemas/`), including nested structured shapes for
+  `KeyTakeaways`, `Topics`, and `TimestampedSection` used by the future
+  summarization engine.
+- Alembic wired for async SQLAlchemy (`backend/alembic/env.py`) plus a
+  hand-written initial migration (`0001_initial_schema.py`) creating all
+  tables, indexes, FKs (cascade/set-null per relationship), and check
+  constraints for the three string-backed enums.
+- `docs/ARCHITECTURE.md` §5 updated with the actual schema/ERD and the
+  reasoning behind cascade rules and enum-as-checked-string storage.
+- `backend/tests/unit/test_models.py` verifying every model registers on
+  `Base.metadata` and the `favorites` unique constraint is present.
+
 ### Added — Step 1: Project scaffolding
 - Clean-architecture backend skeleton (`backend/app/{core,api,models,schemas,services,repositories,agents,prompts,vector_store,middleware,utils,db}`).
 - FastAPI app factory (`backend/app/main.py`) with CORS, centralized `AppError`
