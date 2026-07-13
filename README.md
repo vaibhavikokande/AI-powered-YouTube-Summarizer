@@ -5,7 +5,7 @@ podcasts, interviews, tech talks, tutorials — into summaries, timestamped
 notes, flashcards, quizzes, mind maps, and a RAG-powered chat you can ask
 questions of.
 
-> **Status:** Step 8 of 15 complete (mind map, FAQ, flashcards, quiz, notes generators). See
+> **Status:** Step 9 of 15 complete (auth + dashboard/history). See
 > [CHANGELOG.md](CHANGELOG.md) for what's landed and
 > [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the system design.
 
@@ -106,7 +106,7 @@ updates before moving to the next:
 6. ✅ Summarization engine (short/medium/detailed/bullet + timestamped)
 7. ✅ RAG pipeline (chat with the video)
 8. ✅ Mind maps, FAQ, flashcards, quiz, notes generators
-9. Auth (JWT + Google OAuth), dashboard/history
+9. ✅ Auth (JWT + Google OAuth), dashboard/history
 10. Export (PDF/DOCX/Markdown/TXT), share links, TTS
 11. Background jobs, caching, rate limiting
 12. Frontend UI build-out

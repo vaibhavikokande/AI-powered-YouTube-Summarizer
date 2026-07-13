@@ -27,3 +27,6 @@ class User(Base, UUIDPKMixin, TimestampMixin):
     chat_sessions: Mapped[list["ChatSession"]] = relationship(
         back_populates="user", cascade="all, delete-orphan"
     )
+    history_entries: Mapped[list["HistoryEntry"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )

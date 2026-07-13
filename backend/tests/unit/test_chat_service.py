@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import ForbiddenError, NotFoundError
 from app.models.enums import ChatRole
 from app.services.chat_service import ChatService
 
@@ -33,14 +33,39 @@ def _service_with_mocks() -> ChatService:
     return service
 
 
-async def test_get_or_create_session_returns_existing_session():
+async def test_get_or_create_session_returns_existing_anonymous_session():
     service = _service_with_mocks()
     existing = MagicMock()
+    existing.user_id = None
     service._repository.get_session = AsyncMock(return_value=existing)
 
     result = await service.get_or_create_session(_fake_video(), session_id=uuid.uuid4())
 
     assert result is existing
+
+
+async def test_get_or_create_session_returns_session_owned_by_same_user():
+    service = _service_with_mocks()
+    user_id = uuid.uuid4()
+    existing = MagicMock()
+    existing.user_id = user_id
+    service._repository.get_session = AsyncMock(return_value=existing)
+
+    result = await service.get_or_create_session(_fake_video(), session_id=uuid.uuid4(), user_id=user_id)
+
+    assert result is existing
+
+
+async def test_get_or_create_session_raises_forbidden_for_a_different_users_session():
+    service = _service_with_mocks()
+    existing = MagicMock()
+    existing.user_id = uuid.uuid4()
+    service._repository.get_session = AsyncMock(return_value=existing)
+
+    with pytest.raises(ForbiddenError):
+        await service.get_or_create_session(
+            _fake_video(), session_id=uuid.uuid4(), user_id=uuid.uuid4()
+        )
 
 
 async def test_get_or_create_session_raises_when_session_id_not_found():

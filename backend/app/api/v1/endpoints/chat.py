@@ -6,7 +6,9 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user_optional
 from app.db.session import get_db
+from app.models.user import User
 from app.services.chat_service import ChatService
 from app.services.transcript_service import TranscriptService
 from app.services.video_service import VideoService
@@ -23,19 +25,27 @@ class ChatRequest(BaseModel):
 
 
 @router.post("/chat")
-async def chat_with_video(request: ChatRequest, db: AsyncSession = Depends(get_db)) -> StreamingResponse:
+async def chat_with_video(
+    request: ChatRequest,
+    current_user: User | None = Depends(get_current_user_optional),
+    db: AsyncSession = Depends(get_db),
+) -> StreamingResponse:
     """Ask a question about a video's content; streams the answer as SSE.
 
     Each event while streaming is `data: {"token": "..."}`; the final event
     is `data: {"session_id": "...", "done": true}` so the frontend can send
     follow-up questions against the same session_id (conversation memory).
+    Works anonymously; if authenticated, the session is tied to the user's
+    account and can't be continued by anyone else.
     """
+    user_id = current_user.id if current_user else None
+
     video = await VideoService(db).get_or_fetch_video(request.url)
     transcript = await TranscriptService(db).get_or_fetch_transcript(
         video_id=video.id, youtube_video_id=video.youtube_video_id
     )
     chat_service = ChatService(db)
-    chat_session = await chat_service.get_or_create_session(video, request.session_id)
+    chat_session = await chat_service.get_or_create_session(video, request.session_id, user_id)
 
     async def event_stream():
         async for token in chat_service.ask(video, transcript, chat_session, request.message):

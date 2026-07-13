@@ -2,6 +2,7 @@ from app.models.chat import ChatMessage, ChatSession
 from app.models.faq import FAQItem
 from app.models.favorite import Bookmark, Favorite
 from app.models.flashcard import Flashcard
+from app.models.history import HistoryEntry
 from app.models.note import Note
 from app.models.quiz import Quiz, QuizQuestion
 from app.models.share_link import ShareLink
@@ -25,4 +26,5 @@ __all__ = [
     "ShareLink",
     "Favorite",
     "Bookmark",
+    "HistoryEntry",
 ]

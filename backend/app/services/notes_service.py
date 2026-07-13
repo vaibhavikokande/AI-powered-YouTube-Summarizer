@@ -1,3 +1,5 @@
+import uuid
+
 from langchain_core.messages import HumanMessage
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,7 +23,9 @@ class NotesService:
         self._llm = llm_provider or LLMProvider()
         self._content_prep = content_prep or ContentPrepService(session, self._llm)
 
-    async def generate(self, video: Video, transcript: Transcript) -> Note:
+    async def generate(
+        self, video: Video, transcript: Transcript, user_id: uuid.UUID | None = None
+    ) -> Note:
         existing = await self._repository.get_by_video(video.id)
         if existing is not None:
             return existing
@@ -30,4 +34,4 @@ class NotesService:
         content_markdown = await self._llm.generate_text(
             [HumanMessage(content=notes_prompt(combined, video.title))]
         )
-        return await self._repository.create(video.id, content_markdown)
+        return await self._repository.create(video.id, content_markdown, user_id=user_id)

@@ -5,6 +5,48 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added — Step 9: Auth (JWT + Google OAuth), dashboard/history
+- `app/core/security.py`: password hashing (`passlib`/bcrypt), JWT access
+  (60 min) + refresh (7 day) token creation/decoding (`python-jose`).
+- `app/services/google_oauth_service.py`: verifies a Google Identity
+  Services ID token by validating its signature against Google's public
+  JWKS (via `authlib`) — deliberately avoids the `google-auth` SDK, since
+  an ID token is just a standard JWT. JWKS-fetching is a separate method
+  specifically so it can be mocked without needing to fake an async HTTP
+  context manager in tests.
+- `app/services/auth_service.py`: register, authenticate, Google login
+  (auto-links to an existing password account by email on first Google
+  login, or creates a new user), and refresh-token rotation.
+- `app/api/deps.py`: `get_current_user`/`get_current_user_optional` FastAPI
+  dependencies. `/video`, `/summarize`, `/chat`, and `/notes` now accept an
+  optional bearer token — they still work anonymously, but attribute the
+  action to the caller when authenticated.
+- `POST /register`, `POST /login`, `POST /login/google`, `POST /refresh`,
+  `GET /me` (`app/api/v1/endpoints/auth.py`).
+- **Design fix caught before it shipped:** initially wired history/search
+  around `Video.created_by_user_id`, but `Video` rows are deduplicated
+  *globally* by `youtube_video_id` — a single-owner column can't represent
+  "in my history" once a second user summarizes a video someone else
+  already looked up. Replaced with a `HistoryEntry` join table
+  (`user_id`, `video_id`, unique constraint, `updated_at` as "last
+  viewed") — migration `0003`. `GET /history` now covers History, Recently
+  Summarized, and Search (by title) with one query, since they're the same
+  underlying data.
+- **Security fix caught in the same pass:** `ChatService.get_or_create_session`
+  accepted any `session_id` without checking ownership — a logged-in user
+  could continue another authenticated user's chat session just by knowing
+  (or guessing) its UUID. Now raises `ForbiddenError` unless the session is
+  anonymous or owned by the requesting user.
+- Favorites (`GET/POST/DELETE /favorites`) and Bookmarks
+  (`GET/POST /bookmarks`, `DELETE /bookmarks/{id}`) — thin services over
+  the `Favorite`/`Bookmark` models from Step 2; bookmark deletion checks
+  ownership (`ForbiddenError` for another user's bookmark).
+- Tests: JWT round-trip + tamper rejection, `AuthService` (register,
+  authenticate, all three Google-login paths, refresh), `GoogleOAuthService`
+  (not-configured, valid, wrong-audience, JOSE-error-wrapping),
+  `get_current_user`/`get_current_user_optional`, and service + API tests
+  for history, favorites, and bookmarks.
+
 ### Added — Step 8: Content generators (mind map, FAQ, flashcards, quiz, notes)
 - **Refactor carried over from Step 6:** extracted the map-step (chunking +
   per-chunk summarization) out of `SummarizationService` into a new shared

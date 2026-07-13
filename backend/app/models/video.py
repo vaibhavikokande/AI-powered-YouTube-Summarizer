@@ -54,3 +54,6 @@ class Video(Base, UUIDPKMixin, TimestampMixin):
     bookmarks: Mapped[list["Bookmark"]] = relationship(
         back_populates="video", cascade="all, delete-orphan"
     )
+    history_entries: Mapped[list["HistoryEntry"]] = relationship(
+        back_populates="video", cascade="all, delete-orphan"
+    )

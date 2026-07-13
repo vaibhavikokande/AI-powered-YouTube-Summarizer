@@ -5,7 +5,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.agents.llm_provider import LLMProvider
-from app.core.exceptions import NotFoundError
+from app.core.exceptions import ForbiddenError, NotFoundError
 from app.models.chat import ChatSession
 from app.models.enums import ChatRole
 from app.models.transcript import Transcript
@@ -38,6 +38,10 @@ class ChatService:
             chat_session = await self._repository.get_session(session_id)
             if chat_session is None:
                 raise NotFoundError(f"Chat session {session_id} not found.")
+            # Anonymous sessions (user_id is None) are continuable by anyone
+            # holding the id; sessions owned by a user are not.
+            if chat_session.user_id is not None and chat_session.user_id != user_id:
+                raise ForbiddenError("You do not have access to this chat session.")
             return chat_session
         return await self._repository.create_session(video.id, user_id)
 

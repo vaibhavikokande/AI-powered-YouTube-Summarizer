@@ -1,8 +1,11 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.deps import get_current_user_optional
 from app.db.session import get_db
+from app.models.user import User
 from app.schemas.summary import SummarizeRequest, SummaryResponse
+from app.services.history_service import HistoryService
 from app.services.summarization_service import SummarizationService
 from app.services.transcript_service import TranscriptService
 from app.services.video_service import VideoService
@@ -13,15 +16,20 @@ router = APIRouter(tags=["summarize"])
 @router.post("/summarize", response_model=list[SummaryResponse])
 async def summarize_video(
     request: SummarizeRequest,
+    current_user: User | None = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db),
 ) -> list[SummaryResponse]:
     """Validate the URL, resolve video + transcript, and return the requested summaries.
 
-    Runs synchronously today (as do /video and /transcript). Step 11 moves
-    this behind a Celery job once multi-hour transcripts make the request
-    latency here worth backgrounding, per docs/SPEC.md's API standards.
+    Works anonymously; if the caller is authenticated, this counts as a
+    view for GET /history. Runs synchronously today (as do /video and
+    /transcript). Step 11 moves this behind a Celery job once multi-hour
+    transcripts make the request latency here worth backgrounding, per
+    docs/SPEC.md's API standards.
     """
-    video = await VideoService(db).get_or_fetch_video(request.url)
+    user_id = current_user.id if current_user else None
+
+    video = await VideoService(db).get_or_fetch_video(request.url, user_id=user_id)
     transcript = await TranscriptService(db).get_or_fetch_transcript(
         video_id=video.id,
         youtube_video_id=video.youtube_video_id,
@@ -31,6 +39,11 @@ async def summarize_video(
         video=video,
         transcript=transcript,
         summary_types=request.summary_types,
+        user_id=user_id,
         include_mindmap=request.include_mindmap,
     )
+
+    if current_user is not None:
+        await HistoryService(db).record_view(current_user.id, video.id)
+
     return summaries

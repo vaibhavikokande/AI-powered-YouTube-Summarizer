@@ -1,6 +1,6 @@
 # Architecture
 
-> Status: Step 8 (content generators: mind map, FAQ, flashcards, quiz, notes) complete. This document is updated as each
+> Status: Step 9 (auth + dashboard/history) complete. This document is updated as each
 > subsequent build step lands — see [CHANGELOG.md](../CHANGELOG.md).
 
 ## 1. System overview
@@ -188,9 +188,10 @@ same video disagreeing on takeaways/topics due to LLM non-determinism.
 ## 5. Database schema
 
 Implemented in `backend/app/models/` (SQLAlchemy 2.0, `Mapped`/`mapped_column`
-style) and `backend/alembic/versions/` (`0001_initial_schema.py`, plus
+style) and `backend/alembic/versions/` (`0001_initial_schema.py`,
 `0002_add_faq_and_chunk_summaries.py` — adds `faq_items` and
-`transcripts.chunk_summaries_text`, see §4.2).
+`transcripts.chunk_summaries_text`, see §4.2 — and
+`0003_add_history_entries.py`, see below).
 
 ```
 users ──< videos (created_by_user_id, nullable — anonymous summarize allowed)
@@ -203,6 +204,7 @@ videos ──< faq_items
 videos ──< chat_sessions ──< chat_messages
 videos ──< favorites >── users            (whole-video favorite, unique per user+video)
 videos ──< bookmarks >── users            (saved timestamp + optional note within a video)
+videos ──< history_entries >── users      (per-user "viewed" record, unique per user+video)
 summaries ──< share_links     (token-based public share link, optional expiry)
 ```
 
@@ -210,6 +212,14 @@ Design notes:
 
 - **`Video` is deduplicated by `youtube_video_id`** (unique index) — summarizing
   the same URL twice reuses the existing row rather than duplicating metadata.
+- **History is a separate join table (`history_entries`), not `Video.created_by_user_id`.**
+  Because `Video` rows are global (one per YouTube video, shared by every
+  user), a single-owner column can't represent "this is in my history" once
+  a second user summarizes a video someone else already looked up.
+  `HistoryEntry(user_id, video_id)` with a unique constraint and
+  `updated_at`-as-"last viewed" is `Video.created_by_user_id`'s per-user
+  analogue — the same pattern `Favorite`/`Bookmark` already used, applied
+  to viewing rather than favoriting.
 - **JSONB columns** (`transcripts.segments`, `summaries.key_takeaways`,
   `summaries.timestamped_sections`, `summaries.topics`,
   `quiz_questions.options`) hold structured LLM output that doesn't need its
@@ -237,7 +247,23 @@ Design notes:
 
 ## 7. Security
 
-Covered in depth once auth (Step 9) and CI/CD (Step 14) land: JWT access +
-refresh tokens, Google OAuth, per-IP rate limiting, strict Pydantic input
-validation, secrets via environment variables only (never committed — see
-`.env.example` files), CORS allow-list.
+- **Passwords**: hashed with bcrypt (`passlib`), never logged or returned in
+  any response schema.
+- **JWT**: short-lived access tokens (60 min) + longer refresh tokens (7
+  days), both HS256-signed with `JWT_SECRET_KEY` (must be overridden outside
+  local dev — see `.env.example`). `app/api/deps.py` verifies the token
+  type (`access` vs `refresh`) so a refresh token can't be used to call
+  protected endpoints directly.
+- **Google OAuth**: `app/services/google_oauth_service.py` verifies the ID
+  token's signature against Google's JWKS and checks `aud`/`iss` — a
+  forged or third-party-app token is rejected before any user lookup.
+- **Authorization, not just authentication**: `ChatService` rejects
+  continuing another user's chat session (`ForbiddenError`); `BookmarkService`
+  rejects deleting another user's bookmark. Ownership is checked at the
+  service layer, not assumed from a valid token alone.
+- **Anonymous-first, personalized-when-logged-in**: `/video`, `/summarize`,
+  `/chat`, and `/notes` use `get_current_user_optional` — they work without
+  an account (matching the "no login wall" UX most summarizer tools have)
+  but attribute history/ownership when a token is present.
+- Rate limiting (per-IP), CORS allow-list, and secrets-via-env-only are
+  covered in Step 11 and Step 14 respectively.
