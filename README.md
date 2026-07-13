@@ -5,7 +5,7 @@ podcasts, interviews, tech talks, tutorials — into summaries, timestamped
 notes, flashcards, quizzes, mind maps, and a RAG-powered chat you can ask
 questions of.
 
-> **Status:** Step 6 of 15 complete (summarization engine). See
+> **Status:** Step 7 of 15 complete (RAG pipeline / chat with the video). See
 > [CHANGELOG.md](CHANGELOG.md) for what's landed and
 > [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the system design.
 
@@ -104,7 +104,7 @@ updates before moving to the next:
 4. ✅ Transcript extraction (multi-language + translation)
 5. ✅ LLM provider abstraction layer
 6. ✅ Summarization engine (short/medium/detailed/bullet + timestamped)
-7. RAG pipeline (chat with the video)
+7. ✅ RAG pipeline (chat with the video)
 8. Mind maps, FAQ, flashcards, quiz, notes generators
 9. Auth (JWT + Google OAuth), dashboard/history
 10. Export (PDF/DOCX/Markdown/TXT), share links, TTS

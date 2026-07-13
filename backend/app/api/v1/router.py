@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import health, summarize, transcript, video
+from app.api.v1.endpoints import chat, health, summarize, transcript, video
 
 api_router = APIRouter()
 
@@ -8,10 +8,10 @@ api_router.include_router(health.router)
 api_router.include_router(video.router)
 api_router.include_router(transcript.router)
 api_router.include_router(summarize.router)
+api_router.include_router(chat.router)
 
 # Registered incrementally as each feature is built:
 # api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
-# api_router.include_router(chat.router, tags=["chat"])
 # api_router.include_router(quiz.router, tags=["quiz"])
 # api_router.include_router(flashcards.router, tags=["flashcards"])
 # api_router.include_router(faq.router, tags=["faq"])

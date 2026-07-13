@@ -1,6 +1,6 @@
 # Architecture
 
-> Status: Step 6 (summarization engine) complete. This document is updated as each
+> Status: Step 7 (RAG pipeline / chat with the video) complete. This document is updated as each
 > subsequent build step lands — see [CHANGELOG.md](../CHANGELOG.md).
 
 ## 1. System overview
@@ -94,30 +94,43 @@ business logic testable without spinning up FastAPI or a real database.
    (or subscribe via SSE) for job status.
 3. Transcript chunks will also be embedded and written to ChromaDB (Step 7)
    so the "chat with this video" (RAG) feature works immediately after
-   summarization, reusing the same chunk boundaries.
-
-*(Full sequence diagrams are added once Step 7's RAG pipeline exists.)*
+   summarization.
+4. `POST /api/v1/chat` (`app/services/chat_service.py`) indexes the video
+   into ChromaDB on first use (`RagService.ensure_indexed`, a no-op if
+   already indexed), retrieves the top-k most relevant chunks for the
+   question, builds a prompt with full prior conversation history as
+   alternating Human/AI messages, and streams the answer back as SSE —
+   persisting both sides of the exchange once the full answer is assembled.
 
 ## 4. RAG flow
 
+Implemented in `app/vector_store/` (embeddings + Chroma client) and
+`app/services/rag_service.py` + `app/services/chat_service.py`:
+
 ```
 Transcript
-   │  (semantic chunking, ~500–1000 tokens/chunk with overlap)
+   │  (chunk_transcript(), ~1500-char chunks — finer-grained than the
+   │   ~6000-char chunks Step 6's summarizer uses, for precise retrieval)
    ▼
 Chunks
-   │  (sentence-transformers embeddings)
+   │  (sentence-transformers "all-MiniLM-L6-v2", run via asyncio.to_thread)
    ▼
-Embeddings ──▶ ChromaDB (namespaced per video_id)
+Embeddings ──▶ ChromaDB collection "video_{video_id}" (one per video)
    │
    ▼
-Retriever (top-k similarity + optional MMR)
+Retriever (top-k cosine/L2 similarity via collection.query — no MMR yet)
    │
    ▼
-LLM (provider from LLM_PROVIDER) + conversation memory
+LLM (provider from LLM_PROVIDER) + full prior ChatMessage history as context
    │
    ▼
-Answer (streamed back to the client)
+Answer streamed token-by-token over SSE; both messages persisted after
 ```
+
+Indexing happens lazily on the first chat message for a video (not
+eagerly during summarization) and is skipped on every later message once
+`collection.count() > 0` — so multi-turn conversations only pay the
+embedding cost once per video.
 
 ### 4.1 LLM provider abstraction
 

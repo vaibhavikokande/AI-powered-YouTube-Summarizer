@@ -8,6 +8,7 @@ switching providers is a one-line env var change, not a code change.
 """
 
 import logging
+from collections.abc import AsyncIterator
 from typing import TypeVar
 
 from langchain_core.language_models import BaseChatModel
@@ -136,3 +137,14 @@ class LLMProvider:
         """
         structured_model = self._model.with_structured_output(schema)
         return await _ainvoke_with_retry(structured_model, messages)
+
+    async def stream_text(self, messages: list[BaseMessage]) -> AsyncIterator[str]:
+        """Yield answer tokens as they arrive, for chat's streamed responses.
+
+        Deliberately not wrapped in the retry logic above: once tokens have
+        started reaching the client, retrying the whole call would duplicate
+        output rather than recover cleanly.
+        """
+        async for chunk in self._model.astream(messages):
+            if chunk.content:
+                yield chunk.content

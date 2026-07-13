@@ -5,6 +5,37 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added — Step 7: RAG pipeline (chat with the video)
+- `app/vector_store/embeddings.py`: `sentence-transformers` model loaded
+  once per process (`lru_cache`); blocking `.encode()` calls run via
+  `asyncio.to_thread`.
+- `app/vector_store/chroma_client.py`: one ChromaDB collection per video
+  (`video_{video_id}`), so retrieval never crosses between videos. Raises
+  `NotImplementedError` if `VECTOR_STORE_PROVIDER` is ever set to
+  `pinecone`, since only Chroma is implemented (matches the MVP decision
+  from Step 1) — rather than silently ignoring the setting.
+- `app/services/rag_service.py`: indexes a transcript into Chroma using
+  smaller ~1500-char chunks than summarization's ~6000-char chunks (finer
+  retrieval granularity), skipping re-indexing if a video's collection is
+  already populated; retrieves top-k relevant chunks for a question.
+- `LLMProvider.stream_text()` added to the Step 5 abstraction —
+  `.astream()` under the hood, deliberately *not* wrapped in the retry
+  logic (retrying mid-stream would duplicate output already sent to the
+  client).
+- `app/services/chat_service.py`: builds the RAG prompt (system message
+  with retrieved context + full prior conversation history as alternating
+  Human/AI messages + the new question), streams the answer, and persists
+  both sides of the exchange only after the full answer is assembled.
+- `POST /api/v1/chat` (`app/api/v1/endpoints/chat.py`) streams Server-Sent
+  Events (`data: {"token": "..."}` per token, then a final
+  `data: {"session_id": "...", "done": true}` so the client can continue
+  the same conversation).
+- Tests: 5 RAG-service cases (skip-when-indexed, embed-and-add, empty
+  retrieval, result mapping), a streaming test for `LLMProvider.stream_text`
+  (verifying empty chunks are filtered), 5 chat-service cases (session
+  resolution — found/not-found/created — and full ask() flow verifying
+  call order and persisted content), and an SSE-parsing API test.
+
 ### Added — Step 6: Summarization engine
 - `app/utils/chunking.py`: splits transcript segments into chunks capped at
   a character budget (model-agnostic proxy for context-window limits),

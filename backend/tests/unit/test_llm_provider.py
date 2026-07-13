@@ -96,3 +96,19 @@ async def test_generate_structured_uses_with_structured_output():
     fake_model.with_structured_output.assert_called_once_with(Answer)
     structured_model.ainvoke.assert_called_once()
     assert result == Answer(text="42")
+
+
+async def test_stream_text_yields_non_empty_chunk_content():
+    async def fake_astream(messages):
+        for content in ["Hel", "", "lo"]:
+            yield MagicMock(content=content)
+
+    fake_model = MagicMock()
+    fake_model.astream = fake_astream
+    provider = _provider_with_fake_model(fake_model)
+
+    tokens = [token async for token in provider.stream_text([HumanMessage(content="hi")])]
+
+    # The empty-content chunk (e.g. a provider's initial metadata-only chunk)
+    # is filtered out rather than yielded as a blank token.
+    assert tokens == ["Hel", "lo"]
