@@ -1,7 +1,8 @@
 # Architecture
 
-> Status: Step 14 (CI/CD + cloud deployment config) complete. This document is updated as each
-> subsequent build step lands — see [CHANGELOG.md](../CHANGELOG.md).
+> Status: All 15 steps complete. See [CHANGELOG.md](../CHANGELOG.md) for the
+> full build history, and the README's "Verification status" section for
+> what's actually been executed versus reviewed.
 
 ## 1. System overview
 
@@ -66,14 +67,14 @@ business logic testable without spinning up FastAPI or a real database.
 
 **Fast, synchronous endpoints** (return within the request):
 
-0. `GET /api/v1/video?url=...` validates the URL (`app/utils/youtube.py`) and
+1. `GET /api/v1/video?url=...` validates the URL (`app/utils/youtube.py`) and
    returns metadata, fetched via **yt-dlp** (`app/services/metadata_service.py`)
    rather than the official YouTube Data API — this avoids requiring a Google
    Cloud project/API key/quota just to try the app. Videos are deduplicated
    by `youtube_video_id`, so re-submitting the same URL reuses the stored row
    instead of re-fetching. Cached in Redis by video id (§6.1) since this is
    the app's highest-traffic read.
-0.5. `GET /api/v1/transcript?url=...` (`app/services/transcript_service.py` +
+2. `GET /api/v1/transcript?url=...` (`app/services/transcript_service.py` +
    `app/services/youtube_transcript_fetcher.py`) fetches captions via
    `youtube-transcript-api`: manually-created in the requested language →
    auto-generated in that language → whatever's available — translating to
@@ -81,7 +82,7 @@ business logic testable without spinning up FastAPI or a real database.
    is kept per video (the language actually used downstream), with
    `is_auto_generated`/`is_translated`/`source_language` flags so the UI can
    show e.g. "auto-translated from Spanish."
-4. `POST /api/v1/chat` (`app/services/chat_service.py`) indexes the video
+3. `POST /api/v1/chat` (`app/services/chat_service.py`) indexes the video
    into ChromaDB on first use (`RagService.ensure_indexed`, a no-op if
    already indexed), retrieves the top-k most relevant chunks for the
    question, builds a prompt with full prior conversation history as
@@ -389,8 +390,8 @@ walkthrough.
   an account (matching the "no login wall" UX most summarizer tools have)
   but attribute history/ownership when a token is present.
 - **Rate limiting** (per-IP, §6.3) and CORS allow-list (`app/main.py`) are
-  in place; secrets-via-env-only is covered further in Step 14's deployment
-  pipeline.
+  in place; secrets are read from environment variables only and never
+  committed (`.env` is gitignored; `.env.example` files hold placeholders).
 
 ## 9. Frontend architecture
 
@@ -431,11 +432,13 @@ Two implementation notes worth calling out:
   `cn()`), so swapping in CLI-generated versions later is a drop-in
   replacement, not a rewrite.
 
-**Verification caveat:** with no backend runnable in this environment
-(Steps 1–11 remained unexecuted throughout), the frontend was exercised
-against a backend that returns proxy errors for every API call. This
-confirmed: correct request construction (URLs, params, headers), graceful
-error-state rendering, client-side routing, dark mode, and TypeScript
-type-checking (`tsc --noEmit` clean) — but not the actual success-path
-rendering of real summaries/quizzes/chat streams, which needs a live
-backend to verify.
+**Verification caveat:** with no backend runnable in this environment, the
+frontend was exercised against a backend that returns proxy errors for
+every API call. This confirmed correct request construction, graceful
+error-state rendering, client-side routing, and dark mode — but not the
+actual success-path rendering of real summaries/quizzes/chat streams,
+which needs a live backend. Unlike the backend, though, the frontend's
+own correctness (`tsc --noEmit`, `eslint`, `vitest run`, `npm run build`)
+was genuinely run in this environment, not just reviewed — see the
+README's "Verification status" section for the full picture across both
+halves of the stack.

@@ -3,7 +3,35 @@
 All notable changes to this project are documented here.
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
-## [Unreleased]
+## [1.0.0] - 2026-07-13
+
+All 15 planned steps complete. See the README's "Verification status"
+section for an honest account of what was actually executed (frontend:
+build/lint/test, genuinely run and debugged in this environment) versus
+carefully reviewed but never run (backend: no Python available here —
+first real execution happens in CI).
+
+### Added — Step 15: Final documentation pass
+- README: full API endpoint table (25 endpoints across video/transcript/
+  content-generation/auth/dashboard/export), a "Verification status"
+  section consolidating what's been actually run vs. reviewed across the
+  whole project, and an honest note on why no screenshots are included
+  (the environment's screenshot tool wasn't available when this was
+  written, and there's no live deployment to screenshot instead of
+  fabricating placeholders).
+- `docs/ARCHITECTURE.md`: fixed the "0./0.5." step numbering left over
+  from early build steps (§3), updated the final verification caveat to
+  reflect the full picture across Steps 12–14, and updated the security
+  section's forward-looking "covered in Step 14" language now that Step
+  14 is actually done.
+- `docs/SPEC.md`: fixed a stale naming-convention example — the "API
+  routes: plural, kebab-case" rule (written in Step 1, before any
+  endpoint existed) never actually matched what got built (`/summarize`,
+  `/video`, `/chat` — singular, matching the original feature names).
+  Corrected the documented convention to match the real, shipped API
+  rather than leave an aspiration nothing followed.
+- This CHANGELOG: converted `[Unreleased]` to a dated `1.0.0` release now
+  that the full roadmap is complete.
 
 ### Added — Step 14: CI/CD (GitHub Actions) + cloud deployment config
 - `.github/workflows/backend-ci.yml`: real Postgres + Redis service

@@ -26,7 +26,7 @@ Ground rules for anyone (including future-you) contributing to this codebase.
 | Pydantic schemas | `PascalCase` + suffix | `VideoCreate`, `VideoResponse` |
 | React components | `PascalCase` | `SummaryCard.tsx` |
 | React hooks | `useCamelCase` | `useVideoSummary.ts` |
-| API routes | plural, kebab where multi-word | `/api/v1/chat-sessions` |
+| API routes | singular noun or verb, matching the feature name | `/api/v1/summarize`, `/api/v1/video` |
 | Env vars | `SCREAMING_SNAKE_CASE` | `LLM_PROVIDER` |
 
 ## Folder rules
