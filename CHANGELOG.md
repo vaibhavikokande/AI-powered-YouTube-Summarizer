@@ -5,6 +5,27 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added — Step 5: LLM provider abstraction layer
+- `app/agents/llm_provider.py`: `build_chat_model()` constructs the
+  LangChain chat model (`ChatAnthropic`/`ChatOpenAI`/`ChatGoogleGenerativeAI`)
+  selected by `LLM_PROVIDER`, raising a clean `ExternalServiceError` if that
+  provider's API key isn't configured — instead of a confusing SDK-level
+  auth error surfacing later.
+- `LLMProvider` facade with `generate_text()` (plain completion) and
+  `generate_structured()` (binds a Pydantic schema via LangChain's
+  `with_structured_output`, so JSON mode / structured outputs work
+  identically across all three providers — callers never hand-parse JSON).
+- Transient failures (rate limits, timeouts, connection errors) are retried
+  with exponential backoff via `tenacity`; each provider SDK's exception
+  types are collected lazily so the module still imports if only one
+  provider's package is installed.
+- Provider SDK client construction uses local imports (not module-level),
+  which doubles as the seam that makes `build_chat_model` mockable per
+  provider in tests without needing real API keys.
+- Tests: missing-key error path for all three providers, correct client
+  construction with the right model name per provider, and the
+  `generate_text`/`generate_structured` wrapper logic against a fake model.
+
 ### Added — Step 4: Transcript extraction (multi-language, translation)
 - `app/services/youtube_transcript_fetcher.py`: wraps
   `youtube-transcript-api`, preferring a manually-created transcript in the

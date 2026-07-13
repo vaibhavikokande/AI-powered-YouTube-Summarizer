@@ -1,6 +1,6 @@
 # Architecture
 
-> Status: Step 4 (transcript extraction) complete. This document is updated as each
+> Status: Step 5 (LLM provider abstraction layer) complete. This document is updated as each
 > subsequent build step lands — see [CHANGELOG.md](../CHANGELOG.md).
 
 ## 1. System overview
@@ -113,6 +113,34 @@ LLM (provider from LLM_PROVIDER) + conversation memory
    ▼
 Answer (streamed back to the client)
 ```
+
+### 4.1 LLM provider abstraction
+
+Implemented in `backend/app/agents/llm_provider.py`. Every AI feature
+(summarization, quizzes/flashcards/FAQ, RAG chat) calls `LLMProvider` —
+never a provider SDK directly:
+
+```
+Settings.LLM_PROVIDER ("claude" | "openai" | "gemini")
+   │
+   ▼
+build_chat_model() ── selects ChatAnthropic / ChatOpenAI / ChatGoogleGenerativeAI
+   │                   (raises ExternalServiceError if that provider's API key is missing)
+   ▼
+LLMProvider
+   ├── generate_text(messages) -> str
+   └── generate_structured(messages, schema) -> schema instance
+          (LangChain `with_structured_output` — same call shape on all 3 providers)
+   │
+   ▼
+tenacity retry (3 attempts, exponential backoff) on rate-limit/timeout/connection errors
+```
+
+Switching providers is a one-line `.env` change (`LLM_PROVIDER=openai`) —
+no code in any service changes. Provider SDK classes are imported inside
+`build_chat_model()` (not at module load) specifically so tests can mock
+`ChatAnthropic`/`ChatOpenAI`/`ChatGoogleGenerativeAI` per-provider without
+needing real API keys.
 
 ## 5. Database schema
 
