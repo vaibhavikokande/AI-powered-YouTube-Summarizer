@@ -42,6 +42,9 @@ class Video(Base, UUIDPKMixin, TimestampMixin):
     )
     quizzes: Mapped[list["Quiz"]] = relationship(back_populates="video", cascade="all, delete-orphan")
     notes: Mapped[list["Note"]] = relationship(back_populates="video", cascade="all, delete-orphan")
+    faq_items: Mapped[list["FAQItem"]] = relationship(
+        back_populates="video", cascade="all, delete-orphan"
+    )
     chat_sessions: Mapped[list["ChatSession"]] = relationship(
         back_populates="video", cascade="all, delete-orphan"
     )

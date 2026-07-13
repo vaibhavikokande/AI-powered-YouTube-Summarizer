@@ -9,8 +9,8 @@ from app.models.enums import SummaryType
 from app.models.summary import Summary
 from app.models.transcript import Transcript
 from app.models.video import Video
+from app.prompts.mindmap_prompts import mindmap_prompt
 from app.prompts.summary_prompts import (
-    chunk_summary_prompt,
     key_takeaways_prompt,
     reduce_summary_prompt,
     timestamped_sections_prompt,
@@ -18,21 +18,32 @@ from app.prompts.summary_prompts import (
 )
 from app.repositories.summary_repository import SummaryRepository
 from app.schemas.summary import KeyTakeaways, TimestampedSectionList, Topics
-from app.schemas.transcript import TranscriptSegment
-from app.utils.chunking import TranscriptChunk, chunk_transcript
+from app.services.content_prep_service import ContentPrepService
+from app.utils.chunking import TranscriptChunk
 
 
 class SummarizationService:
-    """Map-reduce summarization: each transcript chunk is summarized in
-    isolation (map), then the chunk summaries are combined into whichever
-    summary lengths/styles were requested, plus key takeaways, topics, and
-    timestamped sections (reduce) — all sharing the same map step regardless
-    of how many summary types are requested.
+    """Reduce step of map-reduce summarization: combines the transcript's
+    cached chunk summaries (see `ContentPrepService`) into whichever summary
+    lengths/styles were requested, plus key takeaways, topics, and
+    timestamped sections.
+
+    Key takeaways/topics/timestamped sections are properties of the video,
+    not of a specific summary type — they're derived once (on the first
+    summary ever generated for a video) and reused across every additional
+    summary type requested afterward, rather than re-derived via fresh LLM
+    calls each time.
     """
 
-    def __init__(self, session: AsyncSession, llm_provider: LLMProvider | None = None):
+    def __init__(
+        self,
+        session: AsyncSession,
+        llm_provider: LLMProvider | None = None,
+        content_prep: ContentPrepService | None = None,
+    ):
         self._repository = SummaryRepository(session)
         self._llm = llm_provider or LLMProvider()
+        self._content_prep = content_prep or ContentPrepService(session, self._llm)
 
     async def summarize(
         self,
@@ -40,6 +51,7 @@ class SummarizationService:
         transcript: Transcript,
         summary_types: list[SummaryType],
         user_id: uuid.UUID | None = None,
+        include_mindmap: bool = False,
     ) -> list[Summary]:
         results: dict[SummaryType, Summary] = {}
         missing_types: list[SummaryType] = []
@@ -51,22 +63,24 @@ class SummarizationService:
             else:
                 missing_types.append(summary_type)
 
-        if not missing_types:
+        if not missing_types and not include_mindmap:
             return [results[st] for st in summary_types]
 
-        segments = [TranscriptSegment(**seg) for seg in transcript.segments]
-        chunks = chunk_transcript(segments)
-        if not chunks:
-            raise ValueError("Transcript has no usable content to summarize.")
+        any_existing = await self._repository.list_by_video(video.id)
 
-        chunk_summaries = await asyncio.gather(*[self._summarize_chunk(c) for c in chunks])
-        combined = "\n\n".join(chunk_summaries)
-
-        key_takeaways, topics, timestamped_sections = await asyncio.gather(
-            self._extract_key_takeaways(combined),
-            self._extract_topics(combined),
-            self._extract_timestamped_sections(chunks, chunk_summaries),
-        )
+        if any_existing:
+            reference = any_existing[0]
+            key_takeaways = KeyTakeaways(**reference.key_takeaways)
+            topics = Topics(**reference.topics)
+            timestamped_sections = TimestampedSectionList(sections=reference.timestamped_sections)
+            combined = await self._content_prep.get_combined_summary(transcript)
+        else:
+            combined, chunks, chunk_summaries = (
+                await self._content_prep.get_combined_summary_with_chunks(transcript)
+            )
+            key_takeaways, topics, timestamped_sections = await self._extract_video_level_content(
+                combined, chunks, chunk_summaries
+            )
 
         for summary_type in missing_types:
             content = await self._reduce_summary(combined, summary_type, video.title)
@@ -82,10 +96,23 @@ class SummarizationService:
             )
             results[summary_type] = summary
 
+        if include_mindmap:
+            for summary_type in summary_types:
+                summary = results[summary_type]
+                if summary.mindmap_markdown is None:
+                    summary.mindmap_markdown = await self._generate_mindmap(combined, video.title)
+                    await self._repository.update_mindmap(summary.id, summary.mindmap_markdown)
+
         return [results[st] for st in summary_types]
 
-    async def _summarize_chunk(self, chunk: TranscriptChunk) -> str:
-        return await self._llm.generate_text([HumanMessage(content=chunk_summary_prompt(chunk.text))])
+    async def _extract_video_level_content(
+        self, combined: str, chunks: list[TranscriptChunk], chunk_summaries: list[str]
+    ) -> tuple[KeyTakeaways, Topics, TimestampedSectionList]:
+        return await asyncio.gather(
+            self._extract_key_takeaways(combined),
+            self._extract_topics(combined),
+            self._extract_timestamped_sections(chunks, chunk_summaries),
+        )
 
     async def _reduce_summary(
         self, combined: str, summary_type: SummaryType, video_title: str | None
@@ -110,4 +137,9 @@ class SummarizationService:
         timestamped = list(zip((c.start_seconds for c in chunks), chunk_summaries))
         return await self._llm.generate_structured(
             [HumanMessage(content=timestamped_sections_prompt(timestamped))], TimestampedSectionList
+        )
+
+    async def _generate_mindmap(self, combined: str, video_title: str | None) -> str:
+        return await self._llm.generate_text(
+            [HumanMessage(content=mindmap_prompt(combined, video_title))]
         )

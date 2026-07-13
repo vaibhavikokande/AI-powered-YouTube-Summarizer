@@ -40,3 +40,8 @@ class TranscriptRepository:
         await self._session.commit()
         await self._session.refresh(transcript)
         return transcript
+
+    async def update_chunk_summaries(self, transcript_id: uuid.UUID, chunk_summaries_text: str) -> None:
+        transcript = await self._session.get(Transcript, transcript_id)
+        transcript.chunk_summaries_text = chunk_summaries_text
+        await self._session.commit()

@@ -5,6 +5,38 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added — Step 8: Content generators (mind map, FAQ, flashcards, quiz, notes)
+- **Refactor carried over from Step 6:** extracted the map-step (chunking +
+  per-chunk summarization) out of `SummarizationService` into a new shared
+  `app/services/content_prep_service.py`, whose output is now cached on
+  `Transcript.chunk_summaries_text` (migration `0002`). Every generator in
+  this step builds on the same cached text — asking for flashcards after
+  already generating a summary (or vice versa) no longer re-runs the LLM
+  map step. This also fixed a real inefficiency in Step 6: key
+  takeaways/topics/timestamped sections were being re-derived via fresh LLM
+  calls every time a *new* summary type was requested for a video that
+  already had one — they're video-level properties, not summary-type-level,
+  so they're now derived once and reused across every additional summary
+  type (`SummarizationService.summarize()`).
+- New `FAQItem` model + `faq_items` table (migration `0002`) — the other
+  three generators (flashcards, quiz, notes) already had models from Step 2.
+- `POST /api/v1/faq`, `POST /api/v1/flashcards`, `POST /api/v1/quiz`,
+  `POST /api/v1/notes` — each resolves video → transcript → cached combined
+  summary → structured LLM generation → persists once (idempotent: a
+  second call for the same video returns the existing rows rather than
+  regenerating).
+- Quiz generation supports mixed MCQ/true-false/fill-in-the-blank in one
+  request (`app/prompts/quiz_prompts.py`), with type-specific formatting
+  rules (e.g. true/false and fill-blank must have `options: null`).
+- Mind map generation (`include_mindmap` on `POST /summarize`) fills in the
+  `Summary.mindmap_markdown` field added back in Step 2, as Markdown nested
+  bullets — reuses the same `Summary` row rather than a new resource, since
+  no dedicated endpoint for it was in the original spec's endpoint list.
+- Tests: `ContentPrepService` cache-hit/cache-miss behavior, rewritten
+  `SummarizationService` tests covering first-summary derivation vs.
+  reuse-on-additional-type vs. skip-when-cached vs. mindmap backfill, and
+  service + API tests for all four new generators.
+
 ### Added — Step 7: RAG pipeline (chat with the video)
 - `app/vector_store/embeddings.py`: `sentence-transformers` model loaded
   once per process (`lru_cache`); blocking `.encode()` calls run via

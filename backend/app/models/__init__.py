@@ -1,4 +1,5 @@
 from app.models.chat import ChatMessage, ChatSession
+from app.models.faq import FAQItem
 from app.models.favorite import Bookmark, Favorite
 from app.models.flashcard import Flashcard
 from app.models.note import Note
@@ -20,6 +21,7 @@ __all__ = [
     "Quiz",
     "QuizQuestion",
     "Note",
+    "FAQItem",
     "ShareLink",
     "Favorite",
     "Bookmark",

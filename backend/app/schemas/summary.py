@@ -37,6 +37,7 @@ class Topics(BaseModel):
 class SummarizeOptions(BaseModel):
     summary_types: list[SummaryType] = [SummaryType.MEDIUM]
     language: str = "en"
+    include_mindmap: bool = False
 
 
 class SummarizeRequest(SummarizeOptions):

@@ -1,6 +1,6 @@
 # Architecture
 
-> Status: Step 7 (RAG pipeline / chat with the video) complete. This document is updated as each
+> Status: Step 8 (content generators: mind map, FAQ, flashcards, quiz, notes) complete. This document is updated as each
 > subsequent build step lands — see [CHANGELOG.md](../CHANGELOG.md).
 
 ## 1. System overview
@@ -160,18 +160,46 @@ no code in any service changes. Provider SDK classes are imported inside
 `ChatAnthropic`/`ChatOpenAI`/`ChatGoogleGenerativeAI` per-provider without
 needing real API keys.
 
+### 4.2 Content generation & the shared map step
+
+Summaries, FAQ, flashcards, quiz, notes, and mind maps all need the same
+starting material: the transcript's chunks, each summarized once. Rather
+than every generator re-running that map step, `app/services/content_prep_service.py`
+computes it once and caches the result on `Transcript.chunk_summaries_text`:
+
+```
+                         ┌─────────────────────────┐
+                         │ ContentPrepService        │
+Transcript ─────────────▶│  .get_combined_summary()  │──▶ combined chunk-summary text
+                         │  (cache hit: return text  │      │
+                         │   from chunk_summaries_   │      │  used by all six generators:
+                         │   text; cache miss:       │      ▼
+                         │   chunk + map + persist)  │  Summary content (per type) · KeyTakeaways ·
+                         └─────────────────────────┘  Topics · Mind map · FAQ · Flashcards · Quiz · Notes
+```
+
+`SummarizationService` additionally derives `key_takeaways`/`topics`/
+`timestamped_sections` only on a video's *first* summary ever generated
+(they describe the video, not a specific summary type) and reuses them
+from that first `Summary` row for every later summary type requested —
+avoiding both redundant LLM calls and the risk of two summary rows for the
+same video disagreeing on takeaways/topics due to LLM non-determinism.
+
 ## 5. Database schema
 
 Implemented in `backend/app/models/` (SQLAlchemy 2.0, `Mapped`/`mapped_column`
-style) and `backend/alembic/versions/0001_initial_schema.py`.
+style) and `backend/alembic/versions/` (`0001_initial_schema.py`, plus
+`0002_add_faq_and_chunk_summaries.py` — adds `faq_items` and
+`transcripts.chunk_summaries_text`, see §4.2).
 
 ```
 users ──< videos (created_by_user_id, nullable — anonymous summarize allowed)
-videos ──< transcripts        (one row per language fetched)
+videos ──< transcripts        (one row per language fetched; caches chunk_summaries_text)
 videos ──< summaries          (one row per summary_type: short/medium/detailed/bullet)
 videos ──< flashcards
 videos ──< quizzes ──< quiz_questions
 videos ──< notes
+videos ──< faq_items
 videos ──< chat_sessions ──< chat_messages
 videos ──< favorites >── users            (whole-video favorite, unique per user+video)
 videos ──< bookmarks >── users            (saved timestamp + optional note within a video)

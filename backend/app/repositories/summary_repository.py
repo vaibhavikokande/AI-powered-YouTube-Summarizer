@@ -53,3 +53,8 @@ class SummaryRepository:
         await self._session.commit()
         await self._session.refresh(summary)
         return summary
+
+    async def update_mindmap(self, summary_id: uuid.UUID, mindmap_markdown: str) -> None:
+        summary = await self._session.get(Summary, summary_id)
+        summary.mindmap_markdown = mindmap_markdown
+        await self._session.commit()

@@ -24,4 +24,9 @@ class Transcript(Base, UUIDPKMixin, TimestampMixin):
     # List of {start, duration, text} segments as returned by the transcript API.
     segments: Mapped[list[dict]] = mapped_column(JSONB, nullable=False, default=list)
 
+    # Cache of the map-step output (each transcript chunk summarized once) —
+    # every content generator (summaries, FAQ, flashcards, quiz, notes, mind
+    # map) builds on this instead of re-running the LLM map step per feature.
+    chunk_summaries_text: Mapped[str | None] = mapped_column(Text, nullable=True)
+
     video: Mapped["Video"] = relationship(back_populates="transcripts")

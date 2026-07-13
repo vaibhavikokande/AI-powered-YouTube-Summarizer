@@ -28,6 +28,9 @@ async def summarize_video(
         preferred_language=request.language,
     )
     summaries = await SummarizationService(db).summarize(
-        video=video, transcript=transcript, summary_types=request.summary_types
+        video=video,
+        transcript=transcript,
+        summary_types=request.summary_types,
+        include_mindmap=request.include_mindmap,
     )
     return summaries
