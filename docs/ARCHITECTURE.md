@@ -1,6 +1,6 @@
 # Architecture
 
-> Status: Step 13 (test suite) complete. This document is updated as each
+> Status: Step 14 (CI/CD + cloud deployment config) complete. This document is updated as each
 > subsequent build step lands — see [CHANGELOG.md](../CHANGELOG.md).
 
 ## 1. System overview
@@ -340,14 +340,33 @@ Two independent retry layers, deliberately not merged into one:
   `NotFoundError`, where retrying identical bad input just delays an
   inevitable identical failure.
 
-## 7. Deployment
+## 7. CI/CD & Deployment
+
+**CI** (`.github/workflows/backend-ci.yml`, `frontend-ci.yml`,
+`docker-build.yml`) runs on every push/PR: backend lint
+(ruff/black/mypy) + unit/API tests against mocks + integration tests
+against real Postgres/Redis service containers + Alembic migration
+check; frontend typecheck/lint/test/build; both Dockerfiles built (not
+pushed) to catch breakage early. This is the first point in the project
+where the ~50 backend tests accumulated since Step 1 actually run, since
+GitHub's runners have Python and this development machine didn't.
+
+**CD** (`.github/workflows/deploy.yml`) is gated behind a repository
+variable (`ENABLE_DEPLOY`), not just secret presence — so wiring up CI/CD
+doesn't immediately attempt (and fail) a deployment before Railway/Vercel
+projects exist. See the README's Deployment section for the full setup
+walkthrough.
 
 - **Local development:** `docker-compose up` runs Postgres, Redis, ChromaDB,
   the FastAPI backend (with `--reload`), a Celery worker, and the Vite dev
   server together.
-- **Production:** backend + Celery worker deploy to Railway (Dockerfile-based),
-  frontend deploys to Vercel, Postgres/Redis are managed add-ons. Details and
-  pipeline are added in Step 14.
+- **Production:** backend + Celery worker deploy to Railway as two services
+  from the same Dockerfile (`backend/railway.toml`), differing only in
+  start command; frontend deploys to Vercel (`frontend/vercel.json` adds
+  the SPA rewrite client-side routing needs). The frontend calls the
+  backend via `VITE_API_BASE_URL` in production (no dev-server proxy
+  exists outside `vite dev`) — see `frontend/src/services/api.ts`.
+- Postgres/Redis are Railway-managed add-ons in production.
 
 ## 8. Security
 

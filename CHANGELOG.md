@@ -5,6 +5,48 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added — Step 14: CI/CD (GitHub Actions) + cloud deployment config
+- `.github/workflows/backend-ci.yml`: real Postgres + Redis service
+  containers, Alembic migration check, `ruff`/`black`/`mypy`, then
+  `pytest -m "not integration"` and `pytest -m integration` separately —
+  the first place in this project where the ~50 backend tests
+  accumulated since Step 1 will actually execute, since this development
+  machine never had Python.
+- `.github/workflows/frontend-ci.yml`: `tsc --noEmit`, `eslint`,
+  `vitest run`, `npm run build`.
+- `.github/workflows/docker-build.yml`: builds both Dockerfiles (not
+  pushed) to catch breakage.
+- `.github/workflows/deploy.yml`: deploys backend+worker to Railway and
+  frontend to Vercel — gated behind an `ENABLE_DEPLOY` repository
+  variable (not just secret presence), so it doesn't attempt a
+  deployment before real Railway/Vercel projects exist.
+- `backend/railway.toml`, `frontend/vercel.json` (SPA rewrite for
+  client-side routing), `backend/.dockerignore`, `frontend/.dockerignore`.
+- `frontend/src/services/api.ts` now reads `VITE_API_BASE_URL` with a
+  fallback to the relative `/api/v1` path — production (Vercel) has no
+  dev-server proxy, so it needs the full backend URL.
+- **Three real bugs caught by actually running `npm run build` /
+  `npm run lint` while wiring this up** (this machine can run Node, so
+  unlike the backend these were genuinely executed, not just reviewed):
+  1. Missing `@types/node` — `vite.config.ts` uses `path`/`__dirname`.
+  2. `vitest@2.x` depends on `vite@^5`, incompatible with this project's
+     `vite@^6` — upgraded to `vitest@4.x`, which supports Vite 6.
+  3. Fixing Step 12's `tsconfig.node.json` `composite: true` requirement
+     had removed `noEmit`, which caused `tsc -b` to emit a compiled
+     `vite.config.js`/`.d.ts` **directly into the source tree** — fixed
+     with an `outDir` pointed at `node_modules/.tmp/`, plus a missing
+     `frontend/src/vite-env.d.ts` (needed to type `import.meta.env` for
+     the `VITE_API_BASE_URL` change above) and a `*.tsbuildinfo`
+     `.gitignore` entry.
+  4. A test file's `false && "b"` tripped ESLint's
+     `no-constant-binary-expression` (no `eslint.config.js` existed
+     before this step either — added one, flat-config format for
+     ESLint 9).
+- Validated all four workflow files as syntactically correct YAML via
+  `js-yaml` (this environment has no GitHub remote to actually trigger a
+  run, so semantic correctness — action versions, secret wiring — remains
+  unverified in the way "ran and passed" would be).
+
 ### Added — Step 13: Test suite
 - **Backend integration tests** (`backend/tests/integration/`) — the one
   gap in test coverage after 12 steps of unit/API tests with everything

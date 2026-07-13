@@ -12,6 +12,7 @@ describe("cn", () => {
   });
 
   it("drops falsy values", () => {
-    expect(cn("a", false && "b", undefined, null, "c")).toBe("a c");
+    const isEnabled: boolean = false;
+    expect(cn("a", isEnabled && "b", undefined, null, "c")).toBe("a c");
   });
 });

@@ -1,6 +1,11 @@
 {
   "compilerOptions": {
     "composite": true,
+    // Composite projects can't set noEmit, but tsc -b still needs
+    // somewhere to write its build-info/declaration output — route it
+    // into node_modules/.tmp rather than letting it land next to
+    // vite.config.ts in the source tree.
+    "outDir": "./node_modules/.tmp/tsconfig.node",
     "target": "ES2022",
     "lib": ["ES2022"],
     "module": "ESNext",
