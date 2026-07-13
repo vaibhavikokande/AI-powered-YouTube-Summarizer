@@ -1,0 +1,47 @@
+# --- Web framework ---
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.4
+pydantic-settings==2.7.1
+
+# --- Database ---
+sqlalchemy[asyncio]==2.0.36
+asyncpg==0.30.0
+alembic==1.14.0
+
+# --- Cache / broker ---
+redis==5.2.1
+celery==5.4.0
+
+# --- Auth ---
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+authlib==1.4.0
+httpx==0.28.1
+
+# --- AI / RAG ---
+langchain==0.3.14
+langchain-anthropic==0.3.3
+langchain-openai==0.3.0
+langchain-google-genai==2.0.8
+langgraph==0.2.62
+llama-index==0.12.10
+sentence-transformers==3.3.1
+chromadb==0.5.23
+
+# --- YouTube ---
+youtube-transcript-api==0.6.3
+yt-dlp==2024.12.13
+
+# --- Documents / export ---
+python-docx==1.1.2
+reportlab==4.2.5
+markdown==3.7
+
+# --- TTS ---
+gTTS==2.5.4
+
+# --- Utilities ---
+tenacity==9.0.0
+python-multipart==0.0.20
+slowapi==0.1.9
