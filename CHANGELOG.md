@@ -5,6 +5,39 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added — Step 12: Frontend application
+- Typed API client (`frontend/src/lib/api-client.ts` + `frontend/src/types/api.ts`)
+  mirroring every backend schema, and a `useContentJob` hook that drives the
+  request → enqueue → poll → result lifecycle shared by all five job-based
+  endpoints from Step 11.
+- Hand-built ShadCN-style primitives (`frontend/src/components/ui/`) — Button,
+  Card, Input, Textarea, Tabs, Badge, Spinner — using the same Radix +
+  `class-variance-authority` + `tailwind-merge` pattern the real ShadCN CLI
+  generates, since the CLI itself needs an interactive prompt this
+  environment can't run.
+- `SummaryPanel`: requests all four summary types in a single job (the
+  backend's map step is shared across them — see Step 8 — so there's no
+  cost benefit to requesting them one at a time), with local tab-switching
+  between the results plus download/share/TTS actions.
+- `ChatPanel`: streams `POST /chat`'s SSE response via raw `fetch()` — axios
+  doesn't expose a readable stream in the browser the way `response.body`
+  does.
+- `QuizPanel`/`FlashcardsPanel`/`FAQPanel`/`NotesPanel`, `VideoCard`,
+  auth pages (login/register), `HistoryPage`, dark mode (carried over from
+  Step 1), Zustand auth store, React Router.
+- Fixed a pre-existing `tsconfig.node.json` misconfiguration from Step 1
+  (missing `composite: true`, which TypeScript project references require)
+  that only surfaced once this step actually ran `tsc --noEmit`.
+- **Verification**: type-checked clean (`tsc --noEmit`), and manually
+  exercised in the browser preview — dark mode, routing between all four
+  pages, form submission, and error-state rendering when the (unavailable
+  in this environment) backend can't be reached. One query
+  (`GET /history`) initially appeared to hang during manual testing;
+  investigation traced it to the automated browser's focus/blur events
+  retriggering `refetchOnWindowFocus` faster than the query's default
+  retry could settle — not a real bug a normal user would hit, but added
+  `retry: false` anyway since retrying a deterministic 401 has no upside.
+
 ### Changed — Step 11: Background jobs (Celery), caching, rate limiting, retries
 - **Breaking API change**: `POST /summarize`, `/quiz`, `/flashcards`, `/faq`,
   and `/notes` no longer return their result directly — they validate the

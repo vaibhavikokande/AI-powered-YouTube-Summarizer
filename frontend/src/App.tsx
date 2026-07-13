@@ -1,13 +1,12 @@
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
 
-import { api } from "@/services/api";
-
-interface HealthResponse {
-  status: string;
-  app: string;
-  environment: string;
-}
+import { Header } from "@/components/layout/Header";
+import { useBootstrapAuth } from "@/hooks/useAuth";
+import { HistoryPage } from "@/pages/HistoryPage";
+import { HomePage } from "@/pages/HomePage";
+import { LoginPage } from "@/pages/LoginPage";
+import { RegisterPage } from "@/pages/RegisterPage";
 
 function useDarkMode() {
   const [isDark, setIsDark] = useState(
@@ -23,39 +22,17 @@ function useDarkMode() {
 
 export default function App() {
   const { isDark, toggle } = useDarkMode();
-
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ["health"],
-    queryFn: async () => (await api.get<HealthResponse>("/health")).data,
-  });
+  useBootstrapAuth();
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-4 p-8">
-      <div className="flex items-center justify-between w-full max-w-xl">
-        <h1 className="text-2xl font-semibold">AI YouTube Summarizer</h1>
-        <button
-          onClick={toggle}
-          className="rounded-md border border-border px-3 py-1.5 text-sm"
-        >
-          {isDark ? "Light mode" : "Dark mode"}
-        </button>
-      </div>
-
-      <div className="w-full max-w-xl rounded-lg border border-border p-6">
-        <p className="text-muted-foreground text-sm mb-2">Backend status</p>
-        {isLoading && <p>Checking backend connection…</p>}
-        {isError && (
-          <p className="text-red-500">
-            Could not reach the backend at /api/v1/health. Is the FastAPI
-            server running?
-          </p>
-        )}
-        {data && (
-          <p className="font-mono text-sm">
-            {data.status.toUpperCase()} — {data.app} ({data.environment})
-          </p>
-        )}
-      </div>
-    </div>
+    <BrowserRouter>
+      <Header isDark={isDark} onToggleDark={toggle} />
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="/history" element={<HistoryPage />} />
+      </Routes>
+    </BrowserRouter>
   );
 }

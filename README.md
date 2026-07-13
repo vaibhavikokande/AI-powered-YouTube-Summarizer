@@ -5,7 +5,7 @@ podcasts, interviews, tech talks, tutorials — into summaries, timestamped
 notes, flashcards, quizzes, mind maps, and a RAG-powered chat you can ask
 questions of.
 
-> **Status:** Step 11 of 15 complete (background jobs, caching, rate limiting). See
+> **Status:** Step 12 of 15 complete (frontend application). See
 > [CHANGELOG.md](CHANGELOG.md) for what's landed and
 > [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the system design.
 
@@ -109,7 +109,7 @@ updates before moving to the next:
 9. ✅ Auth (JWT + Google OAuth), dashboard/history
 10. ✅ Export (PDF/DOCX/Markdown/TXT), share links, TTS
 11. ✅ Background jobs, caching, rate limiting
-12. Frontend UI build-out
+12. ✅ Frontend UI build-out
 13. Test suite
 14. CI/CD + cloud deployment
 15. Documentation pass + screenshots
