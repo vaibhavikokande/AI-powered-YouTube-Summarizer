@@ -1,6 +1,6 @@
 # Architecture
 
-> Status: Step 9 (auth + dashboard/history) complete. This document is updated as each
+> Status: Step 10 (export, share links, voice summary) complete. This document is updated as each
 > subsequent build step lands — see [CHANGELOG.md](../CHANGELOG.md).
 
 ## 1. System overview
@@ -184,6 +184,28 @@ Transcript ─────────────▶│  .get_combined_summary(
 from that first `Summary` row for every later summary type requested —
 avoiding both redundant LLM calls and the risk of two summary rows for the
 same video disagreeing on takeaways/topics due to LLM non-determinism.
+
+### 4.3 Export, sharing, and voice summary
+
+- **Export** (`app/services/export_service.py`) has no shared "renderer"
+  abstraction across PDF/DOCX/Markdown/TXT — each format is built directly
+  from the `Summary` row's fields. That's deliberate: unifying them behind
+  one intermediate representation would be premature complexity for four
+  formats with genuinely different constraints (reportlab's `Paragraph`
+  parses input as XML-like markup and must be escaped; `python-docx` wants
+  `Document.add_heading`/`add_paragraph(style=...)` calls; Markdown/TXT are
+  just string building). All four are exercised in tests against the real
+  libraries (parsing the DOCX back, checking the PDF's `%PDF` magic bytes)
+  rather than mocked, since the risk here is in the libraries' actual
+  output, not orchestration logic.
+- **Sharing**: `POST /share` mints an unguessable token
+  (`secrets.token_urlsafe`); `GET /share/{token}` is intentionally the only
+  *public, unauthenticated* endpoint that returns user content, since a
+  share link's entire purpose is working for someone without an account.
+- **Voice summary**: generated on demand via `gTTS` rather than
+  pre-generated and stored — there's no blob storage in this stack yet
+  (Step 14's cloud deployment doesn't add one), and regenerating a few
+  KB of audio per request is cheap enough not to need it.
 
 ## 5. Database schema
 

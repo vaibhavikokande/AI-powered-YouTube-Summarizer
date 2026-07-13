@@ -5,6 +5,35 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added — Step 10: Export, share links, voice summary
+- `app/services/export_service.py`: renders a `Summary` to PDF (`reportlab`),
+  DOCX (`python-docx`), Markdown, or plain text. Each format is built
+  directly from the summary's fields rather than by transforming one
+  format's output into another — a naive "strip markdown syntax to get
+  plain text" pass would corrupt LLM-generated prose that legitimately
+  contains sequences like "- " or "> " mid-sentence.
+- PDF export XML-escapes all content before handing it to reportlab's
+  `Paragraph` (which parses its input as markup) — otherwise a summary
+  containing a literal `&`, `<`, or `>` (plausible from an LLM) could break
+  rendering or parsing.
+- `GET /download?summary_id=...&format=pdf|docx|markdown|txt` — streams the
+  file with a `Content-Disposition: attachment` header and a filename
+  derived from the video title.
+- `app/services/share_service.py` + `POST /share` / `GET /share/{token}`:
+  generates an unguessable token (`secrets.token_urlsafe`) for a summary;
+  the `GET` side is a public, unauthenticated endpoint (by design — a
+  shared link has to work for whoever receives it) that also checks
+  expiry.
+- `app/services/tts_service.py` + `GET /tts?summary_id=...`: generates an
+  MP3 voice summary on demand via `gTTS`, run off the event loop through
+  `asyncio.to_thread`.
+- Tests: export tests exercise the real `python-docx`/`reportlab` output
+  (parsing the generated DOCX back with `python-docx`, checking the PDF
+  magic bytes) rather than mocking those libraries, plus a dedicated case
+  confirming special characters don't break PDF generation; share-link
+  and TTS service/endpoint tests with gTTS mocked (per `docs/SPEC.md`'s
+  rule against real network calls in tests).
+
 ### Added — Step 9: Auth (JWT + Google OAuth), dashboard/history
 - `app/core/security.py`: password hashing (`passlib`/bcrypt), JWT access
   (60 min) + refresh (7 day) token creation/decoding (`python-jose`).

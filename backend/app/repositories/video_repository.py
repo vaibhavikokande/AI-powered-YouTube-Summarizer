@@ -11,6 +11,9 @@ class VideoRepository:
     def __init__(self, session: AsyncSession):
         self._session = session
 
+    async def get_by_id(self, video_id: uuid.UUID) -> Video | None:
+        return await self._session.get(Video, video_id)
+
     async def get_by_youtube_id(self, youtube_video_id: str) -> Video | None:
         result = await self._session.execute(
             select(Video).where(Video.youtube_video_id == youtube_video_id)

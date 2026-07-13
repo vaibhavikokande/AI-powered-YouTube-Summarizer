@@ -4,6 +4,7 @@ from app.api.v1.endpoints import (
     auth,
     bookmarks,
     chat,
+    download,
     faq,
     favorites,
     flashcards,
@@ -11,8 +12,10 @@ from app.api.v1.endpoints import (
     history,
     notes,
     quiz,
+    share,
     summarize,
     transcript,
+    tts,
     video,
 )
 
@@ -31,6 +34,6 @@ api_router.include_router(auth.router)
 api_router.include_router(history.router)
 api_router.include_router(favorites.router)
 api_router.include_router(bookmarks.router)
-
-# Registered incrementally as each feature is built:
-# api_router.include_router(downloads.router, tags=["download"])
+api_router.include_router(download.router)
+api_router.include_router(share.router)
+api_router.include_router(tts.router)

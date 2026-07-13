@@ -11,6 +11,9 @@ class SummaryRepository:
     def __init__(self, session: AsyncSession):
         self._session = session
 
+    async def get_by_id(self, summary_id: uuid.UUID) -> Summary | None:
+        return await self._session.get(Summary, summary_id)
+
     async def get_by_video_and_type(
         self, video_id: uuid.UUID, summary_type: SummaryType
     ) -> Summary | None:

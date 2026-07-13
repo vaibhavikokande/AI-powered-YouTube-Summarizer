@@ -4,6 +4,10 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict
 
 
+class ShareLinkCreateRequest(BaseModel):
+    summary_id: uuid.UUID
+
+
 class ShareLinkResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
