@@ -1,6 +1,6 @@
 # Architecture
 
-> Status: Step 5 (LLM provider abstraction layer) complete. This document is updated as each
+> Status: Step 6 (summarization engine) complete. This document is updated as each
 > subsequent build step lands — see [CHANGELOG.md](../CHANGELOG.md).
 
 ## 1. System overview
@@ -81,17 +81,22 @@ business logic testable without spinning up FastAPI or a real database.
    show e.g. "auto-translated from Spanish." This also runs synchronously
    today; Step 11 moves it behind the same background job as summarization
    once multi-hour transcripts make it worth queuing.
-1. `POST /api/v1/summarize` validates the URL and enqueues a Celery job (long
-   transcripts can take minutes to process — never block the request thread).
-2. Worker pipeline: fetch metadata → fetch transcript → chunk transcript →
-   summarize (map-reduce over chunks) → extract topics/takeaways → persist.
-3. Frontend polls (or subscribes via SSE) for job status and renders results
-   as they become available.
-4. Transcript chunks are simultaneously embedded and written to ChromaDB so
-   the "chat with this video" (RAG) feature works immediately after.
+1. `POST /api/v1/summarize` (`app/services/summarization_service.py`) resolves
+   video → transcript, then runs map-reduce: `app/utils/chunking.py` splits
+   the transcript into chunks; each chunk is summarized independently
+   (map, run concurrently via `asyncio.gather`); the chunk summaries are
+   combined (reduce) into each requested summary type, plus key
+   takeaways/topics/timestamped sections extracted once and shared across
+   all requested types. Already-generated summary types are skipped
+   entirely. Currently synchronous, like `/video` and `/transcript`.
+2. Step 11 moves this behind a Celery job once multi-hour transcripts make
+   the in-request latency worth backgrounding; the frontend will then poll
+   (or subscribe via SSE) for job status.
+3. Transcript chunks will also be embedded and written to ChromaDB (Step 7)
+   so the "chat with this video" (RAG) feature works immediately after
+   summarization, reusing the same chunk boundaries.
 
-*(Full sequence diagrams are added in Step 6/7 once the summarization and RAG
-services exist.)*
+*(Full sequence diagrams are added once Step 7's RAG pipeline exists.)*
 
 ## 4. RAG flow
 

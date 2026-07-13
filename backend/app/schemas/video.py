@@ -1,11 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
-
-
-class SummarizeRequest(BaseModel):
-    url: str = Field(..., description="A YouTube video, shorts, or youtu.be URL")
+from pydantic import BaseModel, ConfigDict
 
 
 class VideoMetadata(BaseModel):

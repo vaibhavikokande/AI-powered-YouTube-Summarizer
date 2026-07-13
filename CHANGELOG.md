@@ -5,6 +5,32 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added — Step 6: Summarization engine
+- `app/utils/chunking.py`: splits transcript segments into chunks capped at
+  a character budget (model-agnostic proxy for context-window limits),
+  never splitting a segment and preserving accurate start/end timestamps
+  per chunk — this is what makes multi-hour transcripts tractable.
+- `app/prompts/summary_prompts.py`: named prompt functions for the map step
+  (per-chunk summary), the reduce step (per summary-type instructions for
+  short/medium/detailed/bullet), key takeaways extraction, topic/tag
+  extraction, and timestamped section grouping — all instructed to only
+  use information present in the source, never invent content.
+- `app/services/summarization_service.py`: map-reduce orchestration.
+  Chunks are summarized once (map) and reused across however many summary
+  types are requested; key takeaways/topics/timestamped sections are
+  likewise extracted once per video, not once per summary type. Already-
+  generated summary types are skipped entirely (no LLM call) — mirrors the
+  get-or-fetch pattern from `VideoService`/`TranscriptService`.
+- `POST /api/v1/summarize` (`app/api/v1/endpoints/summarize.py`) — body:
+  `{url, summary_types, language}` — resolves video → transcript →
+  summaries in one request. Still synchronous today, same as `/video` and
+  `/transcript`; Step 11 moves this behind a Celery job.
+- `mindmap_markdown` stays `null` for now — mind map generation is Step 8's
+  job (it updates the same `Summary` row rather than duplicating data).
+- Tests: 5 pure-logic chunking cases, 2 service tests (missing-types
+  generates + persists correctly with the right call counts; all-types-
+  exist skips the LLM entirely), and an API test with dependencies mocked.
+
 ### Added — Step 5: LLM provider abstraction layer
 - `app/agents/llm_provider.py`: `build_chat_model()` constructs the
   LangChain chat model (`ChatAnthropic`/`ChatOpenAI`/`ChatGoogleGenerativeAI`)

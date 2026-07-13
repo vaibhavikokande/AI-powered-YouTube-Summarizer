@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.enums import SummaryType
 
@@ -10,6 +10,14 @@ class TimestampedSection(BaseModel):
     timestamp_seconds: int
     title: str
     summary: str
+
+
+class TimestampedSectionList(BaseModel):
+    """Wraps a list for structured LLM output — providers require a single
+    top-level object/schema, not a bare list, for structured/JSON mode.
+    """
+
+    sections: list[TimestampedSection]
 
 
 class KeyTakeaways(BaseModel):
@@ -29,6 +37,10 @@ class Topics(BaseModel):
 class SummarizeOptions(BaseModel):
     summary_types: list[SummaryType] = [SummaryType.MEDIUM]
     language: str = "en"
+
+
+class SummarizeRequest(SummarizeOptions):
+    url: str = Field(..., description="A YouTube video, shorts, or youtu.be URL")
 
 
 class SummaryResponse(BaseModel):
