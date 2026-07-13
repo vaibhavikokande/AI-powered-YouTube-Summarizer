@@ -1,6 +1,6 @@
 # Architecture
 
-> Status: Step 12 (frontend application) complete. This document is updated as each
+> Status: Step 13 (test suite) complete. This document is updated as each
 > subsequent build step lands — see [CHANGELOG.md](../CHANGELOG.md).
 
 ## 1. System overview

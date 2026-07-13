@@ -76,9 +76,19 @@ Ground rules for anyone (including future-you) contributing to this codebase.
 - **Unit tests** (`tests/unit/`): services and utils with all I/O mocked.
 - **Integration tests** (`tests/integration/`): repository layer against a
   real (test) Postgres via `pytest-asyncio` + a transactional rollback per
-  test.
+  test. The `db_session` fixture (`tests/integration/conftest.py`) binds the
+  session to a connection with `join_transaction_mode="create_savepoint"` —
+  repository code calling `session.commit()` only commits a SAVEPOINT, so the
+  fixture's outer rollback still undoes everything afterward. Marked
+  `@pytest.mark.integration` and skipped (not errored) when no Postgres is
+  reachable — run `docker compose up postgres` first, then `pytest -m integration`.
 - **API tests**: FastAPI `TestClient`/`httpx.AsyncClient` hitting real routes
   with the DB/vector-store dependencies overridden via `app.dependency_overrides`.
+- **Frontend tests** (`frontend/src/**/*.test.{ts,tsx}`): Vitest + React
+  Testing Library. Explicit `afterEach(cleanup)` in `src/test/setup.ts` —
+  don't rely on `@testing-library/react`'s auto-cleanup, which only
+  registers itself when it detects a global `afterEach` (this project
+  doesn't set `globals: true`, so it silently wouldn't have fired).
 - External calls (YouTube, LLM providers) are always mocked/recorded in tests
   — tests must never make real network calls to paid APIs.
 - Minimum bar before merging a feature step: the happy path + one failure

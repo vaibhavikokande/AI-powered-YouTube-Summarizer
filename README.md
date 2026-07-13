@@ -5,7 +5,7 @@ podcasts, interviews, tech talks, tutorials — into summaries, timestamped
 notes, flashcards, quizzes, mind maps, and a RAG-powered chat you can ask
 questions of.
 
-> **Status:** Step 12 of 15 complete (frontend application). See
+> **Status:** Step 13 of 15 complete (test suite). See
 > [CHANGELOG.md](CHANGELOG.md) for what's landed and
 > [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the system design.
 
@@ -80,6 +80,32 @@ See [backend/.env.example](backend/.env.example) and
 | `JWT_SECRET_KEY` | Must be overridden with a real secret outside local dev |
 | `GOOGLE_OAUTH_CLIENT_ID` / `GOOGLE_OAUTH_CLIENT_SECRET` | Google login |
 
+## Testing
+
+**Backend** — from `backend/`, with `requirements-dev.txt` installed:
+
+```bash
+pytest                          # unit + API tests (mocked I/O, no DB/services needed)
+docker compose up -d postgres   # then, for integration tests against real Postgres:
+pytest -m integration           # repository tests exercising real SQL (constraints, cascades)
+```
+
+Unit/API tests mock every external call (LLM providers, YouTube, Redis, Postgres) per
+`docs/SPEC.md`'s testing rules. Integration tests (`tests/integration/`) are the one
+place that talks to a real database — each test runs inside a transaction that's rolled
+back afterward, so nothing persists between runs. They skip gracefully (not error) if no
+Postgres is reachable.
+
+**Frontend** — from `frontend/`:
+
+```bash
+npm test
+```
+
+Vitest + React Testing Library, covering the shared `useContentJob` hook (the
+request/poll/result lifecycle every content generator uses), the Zustand auth
+store, and presentational components.
+
 ## Project structure
 
 ```
@@ -110,7 +136,7 @@ updates before moving to the next:
 10. ✅ Export (PDF/DOCX/Markdown/TXT), share links, TTS
 11. ✅ Background jobs, caching, rate limiting
 12. ✅ Frontend UI build-out
-13. Test suite
+13. ✅ Test suite
 14. CI/CD + cloud deployment
 15. Documentation pass + screenshots
 

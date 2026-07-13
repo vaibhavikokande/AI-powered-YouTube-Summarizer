@@ -5,6 +5,37 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added — Step 13: Test suite
+- **Backend integration tests** (`backend/tests/integration/`) — the one
+  gap in test coverage after 12 steps of unit/API tests with everything
+  mocked: nothing had ever exercised a repository against real SQL.
+  `conftest.py`'s `db_session` fixture binds each test's session to a
+  connection via `join_transaction_mode="create_savepoint"`, so repository
+  code's internal `session.commit()` calls only commit a savepoint — the
+  fixture's outer rollback still discards everything the test wrote.
+  Covers real constraint enforcement (`youtube_video_id` uniqueness,
+  `(user_id, video_id)` uniqueness on favorites) and upsert behavior
+  (`HistoryRepository.touch()`) that mocked tests can't verify. Marked
+  `@pytest.mark.integration`, skipped gracefully without a reachable
+  Postgres.
+- **Frontend test suite** (previously nonexistent): Vitest + React Testing
+  Library + jsdom, 16 tests across 4 files — `useContentJob` (the
+  shared job lifecycle hook, including request-error and job-failure
+  paths), the Zustand auth store (localStorage side effects), `VideoCard`
+  (duration/view-count formatting), and `cn()`.
+  - **Actually executed and iterated on** — unlike every backend test in
+    this project, these ran in this environment. First run: 4/13 failing
+    with "multiple elements found" errors, traced to missing test cleanup
+    between `it()` blocks (`@testing-library/react`'s auto-cleanup only
+    registers when it detects a global `afterEach`, and this project
+    doesn't set `globals: true`). Fixed with an explicit
+    `afterEach(cleanup)` in `src/test/setup.ts`; all 16 tests pass.
+- `pyproject.toml`: registered the `integration` pytest marker;
+  `vite.config.ts`: added a `test` block (jsdom environment, setup file)
+  via the `vitest/config` triple-slash type reference.
+- README: documented how to run both suites, including the Postgres
+  prerequisite for integration tests.
+
 ### Added — Step 12: Frontend application
 - Typed API client (`frontend/src/lib/api-client.ts` + `frontend/src/types/api.ts`)
   mirroring every backend schema, and a `useContentJob` hook that drives the
