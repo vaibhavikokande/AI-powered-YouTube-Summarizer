@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime, timezone
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi.testclient import TestClient
 
@@ -10,7 +10,6 @@ from app.schemas.video import VideoResponse
 
 
 async def _override_get_db():
-    # VideoService is mocked in every test below, so no real session is needed.
     yield None
 
 
@@ -36,10 +35,22 @@ def _fake_video_response() -> VideoResponse:
     )
 
 
-def test_get_video_returns_metadata():
-    with patch("app.api.v1.endpoints.video.VideoService") as MockService:
+def _fake_video_orm_object() -> MagicMock:
+    response = _fake_video_response()
+    video = MagicMock()
+    for field, value in response.model_dump().items():
+        setattr(video, field, value)
+    return video
+
+
+def test_get_video_returns_metadata_on_cache_miss_and_populates_cache():
+    with (
+        patch("app.api.v1.endpoints.video.cache_get_json", new=AsyncMock(return_value=None)),
+        patch("app.api.v1.endpoints.video.cache_set_json", new=AsyncMock()) as mock_cache_set,
+        patch("app.api.v1.endpoints.video.VideoService") as MockService,
+    ):
         MockService.return_value.get_or_fetch_video = AsyncMock(
-            return_value=_fake_video_response()
+            return_value=_fake_video_orm_object()
         )
 
         response = client.get(
@@ -50,6 +61,23 @@ def test_get_video_returns_metadata():
     body = response.json()
     assert body["youtube_video_id"] == "dQw4w9WgXcQ"
     assert body["title"] == "Sample Video"
+    mock_cache_set.assert_called_once()
+
+
+def test_get_video_returns_metadata_on_cache_hit_without_calling_service():
+    cached_payload = _fake_video_response().model_dump(mode="json")
+
+    with (
+        patch("app.api.v1.endpoints.video.cache_get_json", new=AsyncMock(return_value=cached_payload)),
+        patch("app.api.v1.endpoints.video.VideoService") as MockService,
+    ):
+        response = client.get(
+            "/api/v1/video", params={"url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"}
+        )
+
+    assert response.status_code == 200
+    assert response.json()["title"] == "Sample Video"
+    MockService.return_value.get_or_fetch_video.assert_not_called()
 
 
 def test_get_video_missing_url_param_returns_422():

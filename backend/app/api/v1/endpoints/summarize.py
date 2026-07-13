@@ -1,49 +1,40 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Depends, Request
 
 from app.api.deps import get_current_user_optional
-from app.db.session import get_db
+from app.middleware.rate_limit import limiter
 from app.models.user import User
-from app.schemas.summary import SummarizeRequest, SummaryResponse
-from app.services.history_service import HistoryService
-from app.services.summarization_service import SummarizationService
-from app.services.transcript_service import TranscriptService
-from app.services.video_service import VideoService
+from app.schemas.job import JobEnqueuedResponse
+from app.schemas.summary import SummarizeRequest
+from app.tasks.content_tasks import summarize_video_task
+from app.utils.youtube import extract_video_id
 
 router = APIRouter(tags=["summarize"])
 
 
-@router.post("/summarize", response_model=list[SummaryResponse])
+@router.post("/summarize", response_model=JobEnqueuedResponse)
+@limiter.limit("10/minute")
 async def summarize_video(
-    request: SummarizeRequest,
+    request: Request,
+    body: SummarizeRequest,
     current_user: User | None = Depends(get_current_user_optional),
-    db: AsyncSession = Depends(get_db),
-) -> list[SummaryResponse]:
-    """Validate the URL, resolve video + transcript, and return the requested summaries.
+) -> JobEnqueuedResponse:
+    """Validates the URL and enqueues a background job; poll GET /jobs/{task_id}
+    for the resulting summaries.
 
-    Works anonymously; if the caller is authenticated, this counts as a
-    view for GET /history. Runs synchronously today (as do /video and
-    /transcript). Step 11 moves this behind a Celery job once multi-hour
-    transcripts make the request latency here worth backgrounding, per
-    docs/SPEC.md's API standards.
+    Moved off the request path in Step 11 — map-reduce summarization of a
+    multi-hour transcript can take minutes, which is too long to hold an
+    HTTP connection open for. Works anonymously; if authenticated, the job
+    records a GET /history view once it completes. Rate-limited tighter
+    than the app default since this is the most LLM-cost-heavy endpoint.
     """
+    extract_video_id(body.url)  # fail fast on a malformed URL before enqueuing
+
     user_id = current_user.id if current_user else None
-
-    video = await VideoService(db).get_or_fetch_video(request.url, user_id=user_id)
-    transcript = await TranscriptService(db).get_or_fetch_transcript(
-        video_id=video.id,
-        youtube_video_id=video.youtube_video_id,
-        preferred_language=request.language,
+    task = summarize_video_task.delay(
+        body.url,
+        [t.value for t in body.summary_types],
+        body.language,
+        body.include_mindmap,
+        str(user_id) if user_id else None,
     )
-    summaries = await SummarizationService(db).summarize(
-        video=video,
-        transcript=transcript,
-        summary_types=request.summary_types,
-        user_id=user_id,
-        include_mindmap=request.include_mindmap,
-    )
-
-    if current_user is not None:
-        await HistoryService(db).record_view(current_user.id, video.id)
-
-    return summaries
+    return JobEnqueuedResponse(task_id=task.id)

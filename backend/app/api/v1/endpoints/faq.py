@@ -1,21 +1,19 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Request
 
-from app.db.session import get_db
-from app.schemas.faq import FAQGenerateRequest, FAQItemResponse
-from app.services.faq_service import FAQService
-from app.services.transcript_service import TranscriptService
-from app.services.video_service import VideoService
+from app.middleware.rate_limit import limiter
+from app.schemas.faq import FAQGenerateRequest
+from app.schemas.job import JobEnqueuedResponse
+from app.tasks.content_tasks import generate_faq_task
+from app.utils.youtube import extract_video_id
 
 router = APIRouter(tags=["faq"])
 
 
-@router.post("/faq", response_model=list[FAQItemResponse])
-async def generate_faq(
-    request: FAQGenerateRequest, db: AsyncSession = Depends(get_db)
-) -> list[FAQItemResponse]:
-    video = await VideoService(db).get_or_fetch_video(request.url)
-    transcript = await TranscriptService(db).get_or_fetch_transcript(
-        video_id=video.id, youtube_video_id=video.youtube_video_id
-    )
-    return await FAQService(db).generate(video, transcript, count=request.count)
+@router.post("/faq", response_model=JobEnqueuedResponse)
+@limiter.limit("10/minute")
+async def generate_faq(request: Request, body: FAQGenerateRequest) -> JobEnqueuedResponse:
+    """Enqueues FAQ generation; poll GET /jobs/{task_id} for the result."""
+    extract_video_id(body.url)
+
+    task = generate_faq_task.delay(body.url, body.count)
+    return JobEnqueuedResponse(task_id=task.id)

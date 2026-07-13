@@ -1,23 +1,21 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Request
 
-from app.db.session import get_db
-from app.schemas.quiz import QuizGenerateRequest, QuizResponse
-from app.services.quiz_service import QuizService
-from app.services.transcript_service import TranscriptService
-from app.services.video_service import VideoService
+from app.middleware.rate_limit import limiter
+from app.schemas.job import JobEnqueuedResponse
+from app.schemas.quiz import QuizGenerateRequest
+from app.tasks.content_tasks import generate_quiz_task
+from app.utils.youtube import extract_video_id
 
 router = APIRouter(tags=["quiz"])
 
 
-@router.post("/quiz", response_model=QuizResponse)
-async def generate_quiz(
-    request: QuizGenerateRequest, db: AsyncSession = Depends(get_db)
-) -> QuizResponse:
-    video = await VideoService(db).get_or_fetch_video(request.url)
-    transcript = await TranscriptService(db).get_or_fetch_transcript(
-        video_id=video.id, youtube_video_id=video.youtube_video_id
+@router.post("/quiz", response_model=JobEnqueuedResponse)
+@limiter.limit("10/minute")
+async def generate_quiz(request: Request, body: QuizGenerateRequest) -> JobEnqueuedResponse:
+    """Enqueues quiz generation; poll GET /jobs/{task_id} for the result."""
+    extract_video_id(body.url)
+
+    task = generate_quiz_task.delay(
+        body.url, [t.value for t in body.question_types], body.count
     )
-    return await QuizService(db).generate(
-        video, transcript, question_types=request.question_types, count=request.count
-    )
+    return JobEnqueuedResponse(task_id=task.id)

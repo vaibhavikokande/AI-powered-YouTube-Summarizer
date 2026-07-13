@@ -10,6 +10,7 @@ from app.api.v1.endpoints import (
     flashcards,
     health,
     history,
+    jobs,
     notes,
     quiz,
     share,
@@ -37,3 +38,4 @@ api_router.include_router(bookmarks.router)
 api_router.include_router(download.router)
 api_router.include_router(share.router)
 api_router.include_router(tts.router)
+api_router.include_router(jobs.router)

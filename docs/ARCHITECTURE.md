@@ -1,6 +1,6 @@
 # Architecture
 
-> Status: Step 10 (export, share links, voice summary) complete. This document is updated as each
+> Status: Step 11 (background jobs, caching, rate limiting, retries) complete. This document is updated as each
 > subsequent build step lands — see [CHANGELOG.md](../CHANGELOG.md).
 
 ## 1. System overview
@@ -64,13 +64,15 @@ business logic testable without spinning up FastAPI or a real database.
 
 ## 3. Data flow: summarize a video (high level)
 
+**Fast, synchronous endpoints** (return within the request):
+
 0. `GET /api/v1/video?url=...` validates the URL (`app/utils/youtube.py`) and
    returns metadata, fetched via **yt-dlp** (`app/services/metadata_service.py`)
    rather than the official YouTube Data API — this avoids requiring a Google
    Cloud project/API key/quota just to try the app. Videos are deduplicated
    by `youtube_video_id`, so re-submitting the same URL reuses the stored row
-   instead of re-fetching. This step runs synchronously (metadata fetch is
-   fast); only transcript + summarization is pushed to a background job.
+   instead of re-fetching. Cached in Redis by video id (§6.1) since this is
+   the app's highest-traffic read.
 0.5. `GET /api/v1/transcript?url=...` (`app/services/transcript_service.py` +
    `app/services/youtube_transcript_fetcher.py`) fetches captions via
    `youtube-transcript-api`: manually-created in the requested language →
@@ -78,29 +80,42 @@ business logic testable without spinning up FastAPI or a real database.
    English only when the source isn't English already. One transcript row
    is kept per video (the language actually used downstream), with
    `is_auto_generated`/`is_translated`/`source_language` flags so the UI can
-   show e.g. "auto-translated from Spanish." This also runs synchronously
-   today; Step 11 moves it behind the same background job as summarization
-   once multi-hour transcripts make it worth queuing.
-1. `POST /api/v1/summarize` (`app/services/summarization_service.py`) resolves
-   video → transcript, then runs map-reduce: `app/utils/chunking.py` splits
-   the transcript into chunks; each chunk is summarized independently
-   (map, run concurrently via `asyncio.gather`); the chunk summaries are
-   combined (reduce) into each requested summary type, plus key
-   takeaways/topics/timestamped sections extracted once and shared across
-   all requested types. Already-generated summary types are skipped
-   entirely. Currently synchronous, like `/video` and `/transcript`.
-2. Step 11 moves this behind a Celery job once multi-hour transcripts make
-   the in-request latency worth backgrounding; the frontend will then poll
-   (or subscribe via SSE) for job status.
-3. Transcript chunks will also be embedded and written to ChromaDB (Step 7)
-   so the "chat with this video" (RAG) feature works immediately after
-   summarization.
+   show e.g. "auto-translated from Spanish."
 4. `POST /api/v1/chat` (`app/services/chat_service.py`) indexes the video
    into ChromaDB on first use (`RagService.ensure_indexed`, a no-op if
    already indexed), retrieves the top-k most relevant chunks for the
    question, builds a prompt with full prior conversation history as
    alternating Human/AI messages, and streams the answer back as SSE —
    persisting both sides of the exchange once the full answer is assembled.
+   Stays synchronous even after Step 11: an SSE stream needs a live
+   connection to push tokens over, which the job-queue model below doesn't
+   fit — there's nothing to "poll" mid-stream.
+
+**Background-job endpoints** (Step 11 — enqueue and return a `task_id`
+immediately; see §6.1):
+
+1. `POST /api/v1/summarize`, `POST /api/v1/quiz`, `POST /api/v1/flashcards`,
+   `POST /api/v1/faq`, `POST /api/v1/notes` all validate the URL synchronously
+   (fail fast on a malformed URL before enqueuing — `extract_video_id()` is
+   cheap, no need to round-trip through Celery for a 422), then enqueue a
+   Celery task (`app/tasks/content_tasks.py`) and return
+   `{"task_id": "...", "status": "queued"}`.
+2. Each task opens its own DB session (a worker is a separate process from
+   the FastAPI app) and runs the exact same service pipeline the endpoint
+   used to run inline — `VideoService` → `TranscriptService` →
+   `SummarizationService`/`QuizService`/etc. — then serializes the result to
+   a plain dict (`app/tasks/serialization.py`), since Celery's JSON result
+   backend can't serialize ORM objects/UUIDs/enums/datetimes directly.
+3. `GET /api/v1/jobs/{task_id}` (`app/api/v1/endpoints/jobs.py`) polls
+   Celery's result backend (Redis) for status/result — no separate job-status
+   table needed, since Celery already persists this.
+4. Summarization's map-reduce (`app/services/summarization_service.py` +
+   `app/utils/chunking.py`) is unchanged by this move: chunk the transcript,
+   summarize each chunk independently (concurrently, via `asyncio.gather`),
+   combine into each requested summary type, deriving key
+   takeaways/topics/timestamped sections once and reusing them across
+   summary types — all of that now just runs inside the task instead of
+   inline in the request handler.
 
 ## 4. RAG flow
 
@@ -258,7 +273,74 @@ Design notes:
   constraint/index names (e.g. `uq_favorites_user_video`,
   `ck_summaries_summary_type`) so later migrations can reference them by name.
 
-## 6. Deployment
+## 6. Background jobs, caching, rate limiting, retries
+
+### 6.1 Background jobs (Celery)
+
+`app/services/celery_app.py` configures the Celery app (Redis broker +
+result backend, both already used by the app's other Redis needs);
+`app/tasks/content_tasks.py` holds the five tasks. The Celery app uses
+`include=["app.tasks.content_tasks"]` rather than `autodiscover_tasks()` —
+autodiscover looks for a submodule literally named `tasks` inside each
+listed package (i.e. `app.tasks.tasks`), which isn't this project's layout.
+
+```
+Endpoint (e.g. POST /summarize)
+   │  extract_video_id() — fail fast on a malformed URL, no Celery round-trip for a 422
+   ▼
+task.delay(...) → Redis (broker)
+   │                                    202-style response: {"task_id", "status": "queued"}
+   ▼
+Celery worker (separate process)
+   │  opens its own AsyncSession (can't reuse the request's session across processes)
+   ▼
+Same service pipeline the endpoint used to call inline
+   │
+   ▼
+Result serialized to a plain dict (app/tasks/serialization.py — Celery's
+JSON backend can't serialize ORM objects/UUIDs/enums/datetimes) → Redis (backend)
+   │
+   ▼
+GET /jobs/{task_id} reads status/result straight from the result backend
+```
+
+No separate "jobs" database table was added — Celery's result backend
+already persists task state, and duplicating that in Postgres would just be
+two sources of truth to keep in sync.
+
+### 6.2 Caching
+
+`app/core/cache.py` wraps `redis.asyncio` with JSON get/set helpers. Applied
+to `GET /video`: a trending video's metadata gets requested repeatedly by
+many different users, so it's cached by video id (1 hour TTL) as a tier in
+front of Postgres, checked before `VideoService` runs. A cache hit implies
+the row already exists in Postgres (the cache is only populated *after* a
+successful DB write), so downstream FK operations (like recording a
+`GET /history` view) stay safe on a cache hit. The same pattern generalizes
+to any other read-heavy endpoint if traffic patterns call for it later.
+
+### 6.3 Rate limiting
+
+`app/middleware/rate_limit.py` configures a `slowapi` `Limiter` keyed by
+client IP, with `RATE_LIMIT_PER_MINUTE` (default 30/min) as the app-wide
+default. The five content-generation endpoints — the most LLM-cost-heavy
+ones — get a tighter `10/minute` limit via `@limiter.limit(...)` on top of
+that default.
+
+### 6.4 Retries
+
+Two independent retry layers, deliberately not merged into one:
+
+- **LLM-call level** (`app/agents/llm_provider.py`, since Step 5): retries a
+  single provider API call on rate-limit/timeout/connection errors.
+- **Task level** (`app/tasks/content_tasks.py`, this step): retries an
+  entire task on `ExternalServiceError`/`ConnectionError`/`TimeoutError`/
+  `OSError` — genuinely transient infra failures — with exponential backoff
+  and jitter, scoped deliberately to exclude `ValidationAppError`/
+  `NotFoundError`, where retrying identical bad input just delays an
+  inevitable identical failure.
+
+## 7. Deployment
 
 - **Local development:** `docker-compose up` runs Postgres, Redis, ChromaDB,
   the FastAPI backend (with `--reload`), a Celery worker, and the Vite dev
@@ -267,7 +349,7 @@ Design notes:
   frontend deploys to Vercel, Postgres/Redis are managed add-ons. Details and
   pipeline are added in Step 14.
 
-## 7. Security
+## 8. Security
 
 - **Passwords**: hashed with bcrypt (`passlib`), never logged or returned in
   any response schema.
@@ -287,5 +369,6 @@ Design notes:
   `/chat`, and `/notes` use `get_current_user_optional` — they work without
   an account (matching the "no login wall" UX most summarizer tools have)
   but attribute history/ownership when a token is present.
-- Rate limiting (per-IP), CORS allow-list, and secrets-via-env-only are
-  covered in Step 11 and Step 14 respectively.
+- **Rate limiting** (per-IP, §6.3) and CORS allow-list (`app/main.py`) are
+  in place; secrets-via-env-only is covered further in Step 14's deployment
+  pipeline.

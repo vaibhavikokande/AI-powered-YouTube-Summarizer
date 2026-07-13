@@ -1,21 +1,21 @@
-from fastapi import APIRouter, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import APIRouter, Request
 
-from app.db.session import get_db
-from app.schemas.flashcard import FlashcardGenerateRequest, FlashcardResponse
-from app.services.flashcard_service import FlashcardService
-from app.services.transcript_service import TranscriptService
-from app.services.video_service import VideoService
+from app.middleware.rate_limit import limiter
+from app.schemas.flashcard import FlashcardGenerateRequest
+from app.schemas.job import JobEnqueuedResponse
+from app.tasks.content_tasks import generate_flashcards_task
+from app.utils.youtube import extract_video_id
 
 router = APIRouter(tags=["flashcards"])
 
 
-@router.post("/flashcards", response_model=list[FlashcardResponse])
+@router.post("/flashcards", response_model=JobEnqueuedResponse)
+@limiter.limit("10/minute")
 async def generate_flashcards(
-    request: FlashcardGenerateRequest, db: AsyncSession = Depends(get_db)
-) -> list[FlashcardResponse]:
-    video = await VideoService(db).get_or_fetch_video(request.url)
-    transcript = await TranscriptService(db).get_or_fetch_transcript(
-        video_id=video.id, youtube_video_id=video.youtube_video_id
-    )
-    return await FlashcardService(db).generate(video, transcript, count=request.count)
+    request: Request, body: FlashcardGenerateRequest
+) -> JobEnqueuedResponse:
+    """Enqueues flashcard generation; poll GET /jobs/{task_id} for the result."""
+    extract_video_id(body.url)
+
+    task = generate_flashcards_task.delay(body.url, body.count)
+    return JobEnqueuedResponse(task_id=task.id)

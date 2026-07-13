@@ -5,6 +5,39 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed — Step 11: Background jobs (Celery), caching, rate limiting, retries
+- **Breaking API change**: `POST /summarize`, `/quiz`, `/flashcards`, `/faq`,
+  and `/notes` no longer return their result directly — they validate the
+  URL synchronously (fail fast on a malformed URL before enqueuing), enqueue
+  a Celery task, and return `{"task_id", "status": "queued"}`. Poll the new
+  `GET /jobs/{task_id}` for status/result. `/video`, `/transcript`, and
+  `/chat` are unaffected — `/chat` in particular stays synchronous/streaming
+  on purpose, since an SSE connection has nothing to "poll" mid-stream.
+  This was flagged as coming "in Step 11" in every one of those endpoints'
+  docstrings since the step they were built in.
+- `app/services/celery_app.py` + `app/tasks/content_tasks.py`: each task
+  opens its own DB session (a worker is a separate process) and runs the
+  exact same service pipeline the endpoint used to call inline; results are
+  serialized to plain dicts (`app/tasks/serialization.py`) since Celery's
+  JSON backend can't handle ORM objects/UUIDs/enums/datetimes. No new
+  "jobs" table — Celery's Redis result backend already persists task state.
+- **Caching**: `app/core/cache.py` (Redis JSON get/set) applied to
+  `GET /video` — 1-hour TTL cache tier in front of Postgres for the app's
+  highest-traffic read.
+- **Rate limiting**: `slowapi`-based, per-IP, app-wide default from
+  `RATE_LIMIT_PER_MINUTE`; the five job-enqueuing endpoints get a tighter
+  `10/minute` limit since they're the most LLM-cost-heavy.
+- **Task-level retries**: `autoretry_for=(ExternalServiceError,
+  ConnectionError, TimeoutError, OSError)` with exponential backoff + jitter
+  — deliberately scoped to exclude `ValidationAppError`/`NotFoundError`,
+  where retrying identical bad input just delays an identical failure.
+  This is a second, independent retry layer from the LLM-call-level retry
+  already in `app/agents/llm_provider.py` (Step 5).
+- Tests: rewrote the 5 affected endpoint tests (now assert `task.delay(...)`
+  is called correctly and a `task_id` is returned) and `/video`'s test
+  (cache-hit vs. cache-miss paths), added task-pipeline tests mocking each
+  service call, and a `GET /jobs/{task_id}` status test.
+
 ### Added — Step 10: Export, share links, voice summary
 - `app/services/export_service.py`: renders a `Summary` to PDF (`reportlab`),
   DOCX (`python-docx`), Markdown, or plain text. Each format is built
