@@ -1,6 +1,6 @@
 # Architecture
 
-> Status: Step 3 (YouTube metadata extraction) complete. This document is updated as each
+> Status: Step 4 (transcript extraction) complete. This document is updated as each
 > subsequent build step lands — see [CHANGELOG.md](../CHANGELOG.md).
 
 ## 1. System overview
@@ -71,6 +71,16 @@ business logic testable without spinning up FastAPI or a real database.
    by `youtube_video_id`, so re-submitting the same URL reuses the stored row
    instead of re-fetching. This step runs synchronously (metadata fetch is
    fast); only transcript + summarization is pushed to a background job.
+0.5. `GET /api/v1/transcript?url=...` (`app/services/transcript_service.py` +
+   `app/services/youtube_transcript_fetcher.py`) fetches captions via
+   `youtube-transcript-api`: manually-created in the requested language →
+   auto-generated in that language → whatever's available — translating to
+   English only when the source isn't English already. One transcript row
+   is kept per video (the language actually used downstream), with
+   `is_auto_generated`/`is_translated`/`source_language` flags so the UI can
+   show e.g. "auto-translated from Spanish." This also runs synchronously
+   today; Step 11 moves it behind the same background job as summarization
+   once multi-hour transcripts make it worth queuing.
 1. `POST /api/v1/summarize` validates the URL and enqueues a Celery job (long
    transcripts can take minutes to process — never block the request thread).
 2. Worker pipeline: fetch metadata → fetch transcript → chunk transcript →

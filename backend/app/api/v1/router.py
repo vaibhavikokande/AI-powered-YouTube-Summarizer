@@ -1,11 +1,12 @@
 from fastapi import APIRouter
 
-from app.api.v1.endpoints import health, video
+from app.api.v1.endpoints import health, transcript, video
 
 api_router = APIRouter()
 
 api_router.include_router(health.router)
 api_router.include_router(video.router)
+api_router.include_router(transcript.router)
 
 # Registered incrementally as each feature is built:
 # api_router.include_router(auth.router, prefix="/auth", tags=["auth"])

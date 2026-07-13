@@ -5,6 +5,26 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added — Step 4: Transcript extraction (multi-language, translation)
+- `app/services/youtube_transcript_fetcher.py`: wraps
+  `youtube-transcript-api`, preferring a manually-created transcript in the
+  requested language, falling back to auto-generated captions, then to
+  whatever language is available at all — translating to English when the
+  source isn't English and YouTube offers a translation for it.
+- Wraps `TranscriptsDisabled`, `VideoUnavailable`, and
+  `CouldNotRetrieveTranscript` as `ExternalServiceError` so the API never
+  leaks a raw library exception.
+- `app/repositories/transcript_repository.py` +
+  `app/services/transcript_service.py`: get-or-fetch-and-persist, one
+  transcript row per video (whichever language ends up used downstream).
+- `GET /api/v1/transcript?url=...&language=...&translate_to_english=...`
+  (`app/api/v1/endpoints/transcript.py`), resolving the video via
+  `VideoService` first.
+- Tests: 7 fetcher-logic cases (manual/auto-generated fallback, translation
+  triggered vs. skipped, all three disabled/unavailable/unretrievable error
+  paths), a service test proving the fetcher is skipped when a transcript
+  is already stored, and an API test with the DB dependency overridden.
+
 ### Added — Step 3: YouTube URL validation + metadata extraction
 - `app/utils/youtube.py`: `extract_video_id()` supporting `/watch?v=`,
   `youtu.be/`, `/shorts/`, `/embed/`, and `/live/` URL shapes (with or

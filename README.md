@@ -5,7 +5,7 @@ podcasts, interviews, tech talks, tutorials — into summaries, timestamped
 notes, flashcards, quizzes, mind maps, and a RAG-powered chat you can ask
 questions of.
 
-> **Status:** Step 3 of 15 complete (YouTube metadata extraction). See
+> **Status:** Step 4 of 15 complete (transcript extraction). See
 > [CHANGELOG.md](CHANGELOG.md) for what's landed and
 > [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the system design.
 
@@ -101,7 +101,7 @@ updates before moving to the next:
 1. ✅ Project scaffolding
 2. ✅ Database models & migrations
 3. ✅ YouTube metadata extraction
-4. Transcript extraction (multi-language + translation)
+4. ✅ Transcript extraction (multi-language + translation)
 5. LLM provider abstraction layer
 6. Summarization engine (short/medium/detailed/bullet + timestamped)
 7. RAG pipeline (chat with the video)
