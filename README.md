@@ -266,41 +266,57 @@ below.
 
 ## Deployment
 
-**Backend + Celery worker → Railway** (`backend/railway.toml` configures the
-build):
+### Render (recommended — one blueprint, no CLI required)
 
-1. Create a Railway project, add a Postgres and a Redis addon.
-2. Add a service with root directory `backend/` (Railway will detect
-   `railway.toml` and build from `Dockerfile`).
-3. Set environment variables on that service: `DATABASE_URL` and
-   `REDIS_URL`/`CELERY_BROKER_URL`/`CELERY_RESULT_BACKEND` (from the addons
-   above), `JWT_SECRET_KEY` (a real random secret), `LLM_PROVIDER` +
-   whichever API key it needs, and `CORS_ORIGINS` (add your Vercel URL once
-   you have it, see below).
-4. Add a **second** service from the same repo/root directory for the
-   Celery worker, but override its start command to
-   `celery -A app.services.celery_app worker --loglevel=info` in that
-   service's settings (Railway doesn't support two start commands from one
-   `railway.toml`).
-5. Note the backend service's public URL — you'll need it for the frontend.
+[`render.yaml`](render.yaml) at the repo root is a Render **Blueprint**: it
+declares every piece this app needs — Postgres, Redis, the FastAPI backend,
+the Celery worker, and the static frontend build — in one file, using the
+Docker build (`backend/Dockerfile`, now with `build-essential` so
+`chroma-hnswlib`/ChromaDB actually compiles in the cloud, unlike on a
+Windows dev machine without admin rights) so nothing needs installing
+locally to deploy it.
 
-**Frontend → Vercel** (`frontend/vercel.json` handles the SPA rewrite so
-client-side routing works on refresh):
+1. Push this repo to GitHub (already done if you're reading this from
+   there).
+2. In the [Render dashboard](https://dashboard.render.com), click
+   **New → Blueprint** and connect this repository. Render reads
+   `render.yaml` and shows you every resource it's about to create.
+3. You'll be prompted for the env vars marked `sync: false` in
+   `render.yaml` — you only need to fill in the credential for whichever
+   `LLM_PROVIDER` you're using (defaults to `openrouter`, which has a real
+   free tier — see [Environment variables](#environment-variables)); leave
+   the rest blank if you're not using them (Google OAuth, YouTube Data API,
+   Pinecone).
+4. Click **Apply**. Render provisions the database, Redis, backend, worker,
+   and frontend, running `alembic upgrade head` automatically before each
+   backend deploy (`preDeployCommand`).
+5. If Render assigns the frontend a different subdomain than
+   `yt-summarizer-frontend.onrender.com` (name already taken), update the
+   backend's `CORS_ORIGINS` env var to match, and the frontend's
+   `VITE_API_BASE_URL` to match the backend's actual URL, then redeploy
+   both.
 
-1. Import the repo into Vercel with root directory `frontend/`.
-2. Set the `VITE_API_BASE_URL` environment variable to your Railway
-   backend's URL + `/api/v1` (e.g. `https://your-app.up.railway.app/api/v1`)
-   — without this, the frontend falls back to a relative `/api/v1` path
-   that only works behind Vite's dev-server proxy, not in production.
-3. Deploy, then go back to Railway and add this Vercel URL to the
-   backend's `CORS_ORIGINS`.
+Render's free tier web services spin down after inactivity (cold start on
+the next request) and free Postgres/Redis instances are time-limited —
+fine for a demo, upgrade the `plan:` fields in `render.yaml` for anything
+longer-lived.
 
-**Enabling automatic deployment via GitHub Actions:**
+### Railway + Vercel (alternative)
 
-1. In the repo's Settings → Secrets and variables → Actions, add secrets
-   `RAILWAY_TOKEN`, `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`.
-2. Add a repository **variable** (not secret) `ENABLE_DEPLOY` = `true`.
-3. Pushes to `main` now deploy both services automatically.
+`backend/railway.toml` and `frontend/vercel.json` are also present if you'd
+rather split the backend onto Railway and the frontend onto Vercel:
 
-Until `ENABLE_DEPLOY` is set, `deploy.yml`'s jobs are skipped entirely —
-CI stays green without ever attempting a deploy you haven't configured.
+1. **Railway**: create a project, add Postgres + Redis addons, add a
+   service rooted at `backend/` (picks up `railway.toml`/`Dockerfile`), set
+   `DATABASE_URL`, `REDIS_URL`/`CELERY_BROKER_URL`/`CELERY_RESULT_BACKEND`,
+   `JWT_SECRET_KEY`, `LLM_PROVIDER` + its key, and `CORS_ORIGINS`. Add a
+   second service from the same repo for the Celery worker, overriding its
+   start command to `celery -A app.services.celery_app worker --loglevel=info`.
+2. **Vercel**: import the repo with root directory `frontend/`, set
+   `VITE_API_BASE_URL` to the Railway backend's URL + `/api/v1`, deploy,
+   then add the resulting Vercel URL to Railway's `CORS_ORIGINS`.
+3. **GitHub Actions auto-deploy**: add secrets `RAILWAY_TOKEN`,
+   `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`, and a repository
+   **variable** `ENABLE_DEPLOY=true` — `deploy.yml`'s jobs are skipped
+   entirely until that variable is set, so CI stays green without ever
+   attempting a deploy you haven't configured.

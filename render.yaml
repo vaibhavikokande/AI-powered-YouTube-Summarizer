@@ -1,0 +1,170 @@
+databases:
+  - name: yt-summarizer-db
+    databaseName: youtube_summarizer
+    user: yt_summarizer
+    plan: free
+
+services:
+  # --- Redis: cache + Celery broker/backend, all sharing one instance ---
+  - type: keyvalue
+    name: yt-summarizer-redis
+    plan: free
+    ipAllowList: []
+
+  # --- FastAPI backend ---
+  - type: web
+    name: yt-summarizer-backend
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    healthCheckPath: /api/v1/health
+    # Runs after build, before the app starts, on every deploy.
+    preDeployCommand: alembic upgrade head
+    envVars:
+      - key: APP_NAME
+        value: AI YouTube Summarizer
+      - key: APP_ENV
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: API_V1_PREFIX
+        value: /api/v1
+      # Update this after the frontend's first deploy if Render assigns it a
+      # different subdomain than expected (name already taken, etc.).
+      - key: CORS_ORIGINS
+        value: '["https://yt-summarizer-frontend.onrender.com"]'
+      - key: DATABASE_URL
+        fromDatabase:
+          name: yt-summarizer-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: yt-summarizer-redis
+          property: connectionString
+      - key: CELERY_BROKER_URL
+        fromService:
+          name: yt-summarizer-redis
+          property: connectionString
+      - key: CELERY_RESULT_BACKEND
+        fromService:
+          name: yt-summarizer-redis
+          property: connectionString
+      - key: VECTOR_STORE_PROVIDER
+        value: chroma
+      - key: CHROMA_PERSIST_DIR
+        value: ./data/chroma
+      - key: PINECONE_API_KEY
+        sync: false
+      - key: PINECONE_INDEX_NAME
+        sync: false
+      # LLM_PROVIDER selects which of the four credential sets below is
+      # actually used — you only need to fill in the one you pick during
+      # blueprint setup. openrouter has a genuine free tier (no card).
+      - key: LLM_PROVIDER
+        value: openrouter
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL
+        value: claude-sonnet-5
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4o
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_MODEL
+        value: nvidia/nemotron-nano-9b-v2:free
+      - key: EMBEDDING_MODEL
+        value: sentence-transformers/all-MiniLM-L6-v2
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: JWT_ALGORITHM
+        value: HS256
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: "60"
+      - key: REFRESH_TOKEN_EXPIRE_DAYS
+        value: "7"
+      - key: GOOGLE_OAUTH_CLIENT_ID
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_SECRET
+        sync: false
+      - key: YOUTUBE_API_KEY
+        sync: false
+      - key: RATE_LIMIT_PER_MINUTE
+        value: "30"
+      - key: LOG_LEVEL
+        value: INFO
+
+  # --- Celery worker: same image as the backend, different start command ---
+  - type: worker
+    name: yt-summarizer-celery-worker
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    dockerCommand: celery -A app.services.celery_app.celery_app worker --loglevel=info
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: yt-summarizer-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          name: yt-summarizer-redis
+          property: connectionString
+      - key: CELERY_BROKER_URL
+        fromService:
+          name: yt-summarizer-redis
+          property: connectionString
+      - key: CELERY_RESULT_BACKEND
+        fromService:
+          name: yt-summarizer-redis
+          property: connectionString
+      - key: VECTOR_STORE_PROVIDER
+        value: chroma
+      - key: CHROMA_PERSIST_DIR
+        value: ./data/chroma
+      - key: LLM_PROVIDER
+        value: openrouter
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: ANTHROPIC_MODEL
+        value: claude-sonnet-5
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4o
+      - key: GOOGLE_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-2.5-flash
+      - key: OPENROUTER_API_KEY
+        sync: false
+      - key: OPENROUTER_MODEL
+        value: nvidia/nemotron-nano-9b-v2:free
+      - key: EMBEDDING_MODEL
+        value: sentence-transformers/all-MiniLM-L6-v2
+      - key: YOUTUBE_API_KEY
+        sync: false
+      - key: LOG_LEVEL
+        value: INFO
+
+  # --- React/Vite frontend, built as a static site ---
+  - type: web
+    name: yt-summarizer-frontend
+    runtime: static
+    buildCommand: cd frontend && npm ci && npm run build
+    staticPublishPath: ./frontend/dist
+    envVars:
+      # Update this if the backend's actual URL differs from the name above.
+      - key: VITE_API_BASE_URL
+        value: https://yt-summarizer-backend.onrender.com/api/v1
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
