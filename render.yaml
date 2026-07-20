@@ -19,8 +19,10 @@ services:
     dockerContext: ./backend
     plan: free
     healthCheckPath: /api/v1/health
-    # Runs after build, before the app starts, on every deploy.
-    preDeployCommand: alembic upgrade head
+    # preDeployCommand needs a paid plan, so migrations run as part of the
+    # start command instead — safe to repeat on every deploy/restart since
+    # alembic upgrade head is a no-op once the DB is already current.
+    dockerCommand: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
     envVars:
       - key: APP_NAME
         value: AI YouTube Summarizer
@@ -40,14 +42,17 @@ services:
           property: connectionString
       - key: REDIS_URL
         fromService:
+          type: keyvalue
           name: yt-summarizer-redis
           property: connectionString
       - key: CELERY_BROKER_URL
         fromService:
+          type: keyvalue
           name: yt-summarizer-redis
           property: connectionString
       - key: CELERY_RESULT_BACKEND
         fromService:
+          type: keyvalue
           name: yt-summarizer-redis
           property: connectionString
       - key: VECTOR_STORE_PROVIDER
@@ -115,14 +120,17 @@ services:
           property: connectionString
       - key: REDIS_URL
         fromService:
+          type: keyvalue
           name: yt-summarizer-redis
           property: connectionString
       - key: CELERY_BROKER_URL
         fromService:
+          type: keyvalue
           name: yt-summarizer-redis
           property: connectionString
       - key: CELERY_RESULT_BACKEND
         fromService:
+          type: keyvalue
           name: yt-summarizer-redis
           property: connectionString
       - key: VECTOR_STORE_PROVIDER
