@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { getMe, login } from "@/lib/api-client";
+import { getApiErrorMessage } from "@/lib/errors";
 import { useAuthStore } from "@/store/auth-store";
 
 export function LoginPage() {
@@ -26,8 +27,8 @@ export function LoginPage() {
       const user = await getMe();
       setSession(tokens, user);
       navigate("/");
-    } catch {
-      setError("Incorrect email or password.");
+    } catch (err) {
+      setError(getApiErrorMessage(err, "Incorrect email or password."));
     } finally {
       setIsSubmitting(false);
     }

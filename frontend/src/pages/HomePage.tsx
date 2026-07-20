@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { VideoCard } from "@/components/video/VideoCard";
 import { getVideo } from "@/lib/api-client";
+import { getApiErrorMessage } from "@/lib/errors";
 
 export function HomePage() {
   const [searchParams] = useSearchParams();
@@ -46,12 +47,21 @@ export function HomePage() {
 
       {videoQuery.isError && (
         <p className="text-sm text-red-500">
-          Couldn&apos;t resolve that URL — check it&apos;s a valid YouTube video link.
+          {getApiErrorMessage(
+            videoQuery.error,
+            "Couldn't resolve that URL — check it's a valid YouTube video link."
+          )}
         </p>
       )}
 
       {videoQuery.data && (
-        <>
+        // Keyed by video URL: each generator panel owns its own job state
+        // (useContentJob's taskId/hasStarted/result), which isn't tied to
+        // the `url` prop React sees. Without this key, switching to a new
+        // video reuses the same panel instances and leaves them stuck
+        // showing the *previous* video's stale result, error, or "already
+        // started" state instead of resetting to a fresh "Generate" button.
+        <div key={videoQuery.data.url} className="contents">
           <VideoCard video={videoQuery.data} />
           <SummaryPanel url={videoQuery.data.url} />
           <ChatPanel videoUrl={videoQuery.data.url} />
@@ -59,7 +69,7 @@ export function HomePage() {
           <FlashcardsPanel url={videoQuery.data.url} />
           <FAQPanel url={videoQuery.data.url} />
           <NotesPanel url={videoQuery.data.url} />
-        </>
+        </div>
       )}
     </div>
   );

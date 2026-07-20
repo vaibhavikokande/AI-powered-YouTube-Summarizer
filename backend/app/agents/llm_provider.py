@@ -85,9 +85,7 @@ def build_chat_model(settings: Settings | None = None, *, temperature: float = 0
             api_key=settings.OPENAI_API_KEY,
             temperature=temperature,
         )
-    else:
-        # settings.LLM_PROVIDER is a Literal["claude", "openai", "gemini"], so
-        # this is the only remaining case.
+    elif provider == "gemini":
         from langchain_google_genai import ChatGoogleGenerativeAI
 
         if not settings.GOOGLE_API_KEY:
@@ -95,6 +93,22 @@ def build_chat_model(settings: Settings | None = None, *, temperature: float = 0
         return ChatGoogleGenerativeAI(
             model=settings.GEMINI_MODEL,
             google_api_key=settings.GOOGLE_API_KEY,
+            temperature=temperature,
+        )
+    else:
+        # settings.LLM_PROVIDER is a Literal["claude", "openai", "gemini",
+        # "openrouter"], so this is the only remaining case. OpenRouter
+        # speaks the OpenAI API shape, so ChatOpenAI works unmodified —
+        # it just needs pointing at OpenRouter's base URL instead of
+        # OpenAI's.
+        from langchain_openai import ChatOpenAI
+
+        if not settings.OPENROUTER_API_KEY:
+            raise ExternalServiceError("OPENROUTER_API_KEY is not configured.")
+        return ChatOpenAI(
+            model=settings.OPENROUTER_MODEL,
+            api_key=settings.OPENROUTER_API_KEY,
+            base_url="https://openrouter.ai/api/v1",
             temperature=temperature,
         )
 

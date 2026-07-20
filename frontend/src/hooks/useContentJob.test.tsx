@@ -57,8 +57,8 @@ describe("useContentJob", () => {
     expect(result.current.isPolling).toBe(false);
   });
 
-  it("surfaces a request error without ever starting to poll", async () => {
-    const requestFn = vi.fn().mockRejectedValue(new Error("network down"));
+  it("surfaces a fallback message for a non-axios request error without ever starting to poll", async () => {
+    const requestFn = vi.fn().mockRejectedValue(new Error("boom"));
 
     const { result } = renderHook(() => useContentJob(requestFn), { wrapper });
 
@@ -66,7 +66,7 @@ describe("useContentJob", () => {
       await result.current.trigger();
     });
 
-    expect(result.current.requestError).toBe("network down");
+    expect(result.current.requestError).toBe("Something went wrong. Please try again.");
     expect(result.current.hasStarted).toBe(false);
   });
 

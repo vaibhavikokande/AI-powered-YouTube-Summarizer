@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 import { getJobStatus } from "@/lib/api-client";
+import { getApiErrorMessage } from "@/lib/errors";
 import type { JobEnqueuedResponse } from "@/types/api";
 
 /**
@@ -32,7 +33,7 @@ export function useContentJob<T>(requestFn: () => Promise<JobEnqueuedResponse>) 
       const { task_id } = await requestFn();
       setTaskId(task_id);
     } catch (err) {
-      setRequestError(err instanceof Error ? err.message : "Something went wrong.");
+      setRequestError(getApiErrorMessage(err, "Something went wrong. Please try again."));
     } finally {
       setIsRequesting(false);
     }

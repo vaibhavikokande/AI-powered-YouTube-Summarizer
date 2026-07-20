@@ -7,9 +7,11 @@ the same service pipeline the endpoint used to run inline before Step 11.
 
 import asyncio
 import uuid
+from collections.abc import Coroutine
+from typing import TypeVar
 
 from app.core.exceptions import ExternalServiceError
-from app.db.session import AsyncSessionLocal
+from app.db.session import AsyncSessionLocal, engine
 from app.models.enums import QuizQuestionType, SummaryType
 from app.services.celery_app import celery_app
 from app.services.faq_service import FAQService
@@ -40,6 +42,30 @@ _RETRY_KWARGS = {
     "retry_jitter": True,
 }
 
+_T = TypeVar("_T")
+
+
+def _run_task(coro: Coroutine[None, None, _T]) -> _T:
+    """Runs a task coroutine in its own event loop, then disposes the shared
+    async engine's connection pool before that loop closes.
+
+    `engine` (app/db/session.py) is a process-wide singleton also used by the
+    FastAPI app, where a single long-lived event loop makes pooling safe. A
+    Celery worker instead calls asyncio.run() per task, each spinning up and
+    tearing down its own loop — without disposing here, pooled asyncpg
+    connections from one task's loop get reused by the next task's loop and
+    fail with "AttributeError: 'NoneType' object has no attribute 'send'"
+    once their old loop's proactor is gone.
+    """
+
+    async def _run() -> _T:
+        try:
+            return await coro
+        finally:
+            await engine.dispose()
+
+    return asyncio.run(_run())
+
 
 @celery_app.task(name="tasks.summarize_video", bind=True, **_RETRY_KWARGS)
 def summarize_video_task(
@@ -50,7 +76,7 @@ def summarize_video_task(
     include_mindmap: bool,
     user_id: str | None,
 ) -> list[dict]:
-    return asyncio.run(
+    return _run_task(
         _summarize_video(
             url, [SummaryType(t) for t in summary_types], language, include_mindmap, user_id
         )
@@ -86,7 +112,7 @@ async def _summarize_video(
 
 @celery_app.task(name="tasks.generate_quiz", bind=True, **_RETRY_KWARGS)
 def generate_quiz_task(self, url: str, question_types: list[str], count: int) -> dict:
-    return asyncio.run(
+    return _run_task(
         _generate_quiz(url, [QuizQuestionType(t) for t in question_types], count)
     )
 
@@ -103,7 +129,7 @@ async def _generate_quiz(url: str, question_types: list[QuizQuestionType], count
 
 @celery_app.task(name="tasks.generate_flashcards", bind=True, **_RETRY_KWARGS)
 def generate_flashcards_task(self, url: str, count: int) -> list[dict]:
-    return asyncio.run(_generate_flashcards(url, count))
+    return _run_task(_generate_flashcards(url, count))
 
 
 async def _generate_flashcards(url: str, count: int) -> list[dict]:
@@ -118,7 +144,7 @@ async def _generate_flashcards(url: str, count: int) -> list[dict]:
 
 @celery_app.task(name="tasks.generate_faq", bind=True, **_RETRY_KWARGS)
 def generate_faq_task(self, url: str, count: int) -> list[dict]:
-    return asyncio.run(_generate_faq(url, count))
+    return _run_task(_generate_faq(url, count))
 
 
 async def _generate_faq(url: str, count: int) -> list[dict]:
@@ -133,7 +159,7 @@ async def _generate_faq(url: str, count: int) -> list[dict]:
 
 @celery_app.task(name="tasks.generate_notes", bind=True, **_RETRY_KWARGS)
 def generate_notes_task(self, url: str, user_id: str | None) -> dict:
-    return asyncio.run(_generate_notes(url, user_id))
+    return _run_task(_generate_notes(url, user_id))
 
 
 async def _generate_notes(url: str, user_id: str | None) -> dict:

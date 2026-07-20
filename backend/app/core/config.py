@@ -41,7 +41,7 @@ class Settings(BaseSettings):
     PINECONE_INDEX_NAME: str | None = None
 
     # --- LLM providers (all configurable; LLM_PROVIDER selects the active one) ---
-    LLM_PROVIDER: Literal["claude", "openai", "gemini"] = "claude"
+    LLM_PROVIDER: Literal["claude", "openai", "gemini", "openrouter"] = "claude"
 
     ANTHROPIC_API_KEY: str | None = None
     ANTHROPIC_MODEL: str = "claude-sonnet-5"
@@ -50,7 +50,13 @@ class Settings(BaseSettings):
     OPENAI_MODEL: str = "gpt-4o"
 
     GOOGLE_API_KEY: str | None = None
-    GEMINI_MODEL: str = "gemini-1.5-pro"
+    GEMINI_MODEL: str = "gemini-2.5-flash"
+
+    # OpenRouter: OpenAI-API-compatible, but a distinct provider/base URL/key
+    # from plain OpenAI — routes to whichever free/paid model OPENROUTER_MODEL
+    # names (e.g. "meta-llama/llama-3.3-70b-instruct:free").
+    OPENROUTER_API_KEY: str | None = None
+    OPENROUTER_MODEL: str = "nvidia/nemotron-nano-9b-v2:free"
 
     EMBEDDING_MODEL: str = "sentence-transformers/all-MiniLM-L6-v2"
 

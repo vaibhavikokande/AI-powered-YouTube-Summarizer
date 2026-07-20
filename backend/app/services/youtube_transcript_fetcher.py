@@ -41,7 +41,7 @@ class YouTubeTranscriptFetcher:
         translate_to_english: bool = True,
     ) -> FetchedTranscript:
         try:
-            transcript_list = YouTubeTranscriptApi.list_transcripts(youtube_video_id)
+            transcript_list = YouTubeTranscriptApi().list(youtube_video_id)
             transcript = self._select_transcript(transcript_list, preferred_language)
 
             source_language = transcript.language_code
@@ -56,7 +56,12 @@ class YouTubeTranscriptFetcher:
                 transcript = transcript.translate("en")
                 is_translated = True
 
-            fetched_segments = transcript.fetch()
+            # youtube-transcript-api 1.x's Transcript.fetch() returns a
+            # FetchedTranscript of FetchedTranscriptSnippet objects, not the
+            # plain list[dict] the 0.6.x API returned — to_raw_data() gets
+            # back that same list[dict] shape without touching the rest of
+            # this method.
+            fetched_segments = transcript.fetch().to_raw_data()
         except TranscriptsDisabled as exc:
             raise ExternalServiceError("Transcripts are disabled for this video.") from exc
         except VideoUnavailable as exc:

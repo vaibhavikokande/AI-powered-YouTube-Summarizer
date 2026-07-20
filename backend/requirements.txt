@@ -17,6 +17,10 @@ celery==5.4.0
 # --- Auth ---
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
+# bcrypt must stay <4.1 — passlib 1.7.4's own internal self-test crashes
+# against bcrypt 4.1+'s stricter 72-byte enforcement (ValueError on every
+# password hash, since passlib has not been updated for the newer bcrypt).
+bcrypt==4.0.1
 authlib==1.4.0
 httpx==0.28.1
 
@@ -31,8 +35,8 @@ sentence-transformers==3.3.1
 chromadb==0.5.23
 
 # --- YouTube ---
-youtube-transcript-api==0.6.3
-yt-dlp==2024.12.13
+youtube-transcript-api==1.2.4
+yt-dlp==2026.7.4
 
 # --- Documents / export ---
 python-docx==1.1.2

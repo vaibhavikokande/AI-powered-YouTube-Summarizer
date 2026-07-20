@@ -11,34 +11,54 @@ questions of.
 
 ## Verification status (read this before trusting the backend blindly)
 
-This project was built on a machine with **no Python interpreter and no
-Docker** — only Node.js. That constraint shaped how much of it could be
-directly verified versus carefully reviewed:
+This project was originally built on a machine with **no Python interpreter
+and no Docker** — only Node.js — so the backend was carefully reasoned
+through but never executed. In a later session, on the same constrained
+machine (still no Docker, no admin rights), the full stack was actually
+installed and run natively — Python via winget, PostgreSQL and Redis via
+portable (installer-free) binaries — and driven end-to-end through a real
+browser. That surfaced and fixed several real bugs pure code review had
+missed:
 
-- **Backend (FastAPI, all ~50 tests, Alembic migrations, Celery tasks):**
-  never executed locally. Every line was reasoned through, and the test
-  suite is real and should be correct, but "should be correct" and
-  "verified" are different claims. `.github/workflows/backend-ci.yml` is
-  the first place this code will actually run, on GitHub's Python-equipped
-  runners — **run CI (or `pytest` locally) before treating this backend as
-  trustworthy**, especially before pointing it at a real LLM API key.
-- **Frontend (React/TypeScript):** genuinely built, run, and debugged in
-  this environment via Node.js — `npm run build`, `npm run lint`,
-  `npm test`, and manual browser testing all passed for real, and caught
-  and fixed several concrete bugs (see `CHANGELOG.md` Steps 12–14) rather
-  than being reviewed and assumed correct.
-- **CI/CD workflows:** validated as syntactically correct YAML; never
-  triggered (no GitHub remote in this environment).
+- A `passlib`/`bcrypt` version incompatibility that broke every password
+  hash (registration/login) the moment a real password was hashed.
+- Outdated `yt-dlp` and `youtube-transcript-api` pins that no longer worked
+  against current YouTube — both upgraded.
+- A Celery + async-SQLAlchemy bug where the DB connection pool held
+  connections from a dead event loop after the first task, crashing every
+  job after it — fixed by disposing the engine per task.
+- A missing `key` on the generator panels container, so switching to a new
+  video reused the previous video's stale job state.
+- Misleading error messages (e.g. a login failure always saying "Incorrect
+  email or password" even when the real cause was an unreachable server) —
+  replaced with a shared `getApiErrorMessage()` that surfaces the real cause.
+
+With that, the full pipeline — register/login → paste a URL → fetch
+transcript → LLM summarization/quiz/flashcards/FAQ/notes → render in the UI
+— is now genuinely verified working (see Screenshots below), using
+OpenRouter's free tier as the LLM provider (Claude/OpenAI/Gemini are also
+wired up and work the same way with a funded/quota'd key — see
+[Environment variables](#environment-variables)).
+
+**Still unverified in this environment:** the RAG chat feature. It depends
+on `chromadb`, whose `chroma-hnswlib` dependency needs a C++ compiler to
+build (Visual Studio Build Tools), which in turn needs admin rights this
+environment doesn't have. The rest of the app doesn't go down because of
+this — `chroma_client.py` imports `chromadb` lazily, so only the chat
+endpoint is affected. Install `chromadb` in an environment with a C++
+toolchain (or Docker) to verify chat.
+
+- **CI/CD workflows:** validated as syntactically correct YAML; not yet
+  triggered by a real push before this README update.
 - **Cloud deployment (Railway/Vercel):** configuration only —
-  `backend/railway.toml` and `frontend/vercel.json` were written but never
-  deployed; no cloud accounts exist for this project.
+  `backend/railway.toml` and `frontend/vercel.json` were written but not
+  yet deployed.
 
-None of this means the backend is broken — the same careful, incremental,
-step-by-step review that built it also caught and fixed several design bugs
-along the way (see `CHANGELOG.md` Steps 8, 9, and 11) purely through
-reasoning, without execution. It means the confidence level is genuinely
-different across the two halves of this stack, and you should run the test
-suite yourself before relying on it.
+The same careful, incremental review that built this project also caught
+and fixed several design bugs along the way purely through reasoning (see
+`CHANGELOG.md` Steps 8, 9, and 11) — and, in this later session, several
+more through actually running it. Run the test suite yourself (see
+[Testing](#testing)) before relying on any of it in production.
 
 ## Tech stack
 
@@ -99,14 +119,18 @@ npm run dev
 
 ## Screenshots
 
-Not included. This project was built without a runnable Python interpreter or
-Docker on the development machine — the frontend itself was verified running
-in a browser preview (see `CHANGELOG.md` Steps 1 and 12), but this
-environment's screenshot-capture tool wasn't available when this section was
-written, and there's no live deployment yet to screenshot instead of
-fabricating placeholder images. Once deployed (see Deployment below), replace
-this section with real screenshots of the home page, a generated summary,
-and the chat panel.
+Captured from a real local run — register/login, paste a URL, generate.
+
+| | |
+|---|---|
+| **Login** | **Video analyzed + Summary** |
+| ![Login](screenshots/login.png) | ![Video and summary](screenshots/video-and-summary.png) |
+| **Summary — key concepts, timestamped sections, export** | **Generators panel** |
+| ![Summary details](screenshots/summary-details.png) | ![Generators panel](screenshots/generators-panel.png) |
+| **Quiz** | **Flashcards** |
+| ![Quiz](screenshots/quiz.png) | ![Flashcards](screenshots/flashcards.png) |
+| **FAQ** | **Notes** |
+| ![FAQ](screenshots/faq.png) | ![Notes](screenshots/notes.png) |
 
 ## Environment variables
 
@@ -115,8 +139,8 @@ See [backend/.env.example](backend/.env.example) and
 
 | Variable | Purpose |
 |---|---|
-| `LLM_PROVIDER` | `claude` \| `openai` \| `gemini` — selects the active LLM at runtime |
-| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GOOGLE_API_KEY` | Credentials for whichever provider(s) you enable |
+| `LLM_PROVIDER` | `claude` \| `openai` \| `gemini` \| `openrouter` — selects the active LLM at runtime |
+| `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GOOGLE_API_KEY` / `OPENROUTER_API_KEY` | Credentials for whichever provider(s) you enable. `openrouter` is OpenAI-API-compatible and has real free models (e.g. `OPENROUTER_MODEL=nvidia/nemotron-nano-9b-v2:free`) — no card required, good for trying the app without a funded provider account |
 | `VECTOR_STORE_PROVIDER` | `chroma` (default, local) \| `pinecone` |
 | `DATABASE_URL` | Async Postgres connection string |
 | `JWT_SECRET_KEY` | Must be overridden with a real secret outside local dev |
@@ -180,7 +204,7 @@ updates before moving to the next:
 12. ✅ Frontend UI build-out
 13. ✅ Test suite
 14. ✅ CI/CD + cloud deployment
-15. ✅ Documentation pass (screenshots pending a live deployment — see below)
+15. ✅ Documentation pass, including real screenshots from a local run (see above)
 
 ## API documentation
 

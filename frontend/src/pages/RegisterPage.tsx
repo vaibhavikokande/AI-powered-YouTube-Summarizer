@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { getMe, register } from "@/lib/api-client";
+import { getApiErrorMessage } from "@/lib/errors";
 import { useAuthStore } from "@/store/auth-store";
 
 export function RegisterPage() {
@@ -27,8 +28,13 @@ export function RegisterPage() {
       const user = await getMe();
       setSession(tokens, user);
       navigate("/");
-    } catch {
-      setError("Could not create an account — that email may already be registered.");
+    } catch (err) {
+      setError(
+        getApiErrorMessage(
+          err,
+          "Could not create an account — that email may already be registered."
+        )
+      );
     } finally {
       setIsSubmitting(false);
     }
