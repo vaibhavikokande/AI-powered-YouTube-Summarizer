@@ -270,11 +270,21 @@ below.
 
 [`render.yaml`](render.yaml) at the repo root is a Render **Blueprint**: it
 declares every piece this app needs — Postgres, Redis, the FastAPI backend,
-the Celery worker, and the static frontend build — in one file, using the
-Docker build (`backend/Dockerfile`, now with `build-essential` so
+and the static frontend build — in one file, using the Docker build
+(`backend/Dockerfile`, now with `build-essential` so
 `chroma-hnswlib`/ChromaDB actually compiles in the cloud, unlike on a
 Windows dev machine without admin rights) so nothing needs installing
 locally to deploy it.
+
+**The Celery worker runs inside the backend web service** (as a background
+process started alongside `uvicorn`), not as its own service — Render's
+free tier only offers Web Services and Static Sites, not Background
+Workers. The tradeoff: if the Celery process alone crashes, nothing
+restarts it until the whole container next restarts (a health-check
+failure on `/api/v1/health` would only ever catch `uvicorn` dying, not
+Celery). Fine for a demo; if you need real worker isolation/monitoring,
+upgrade to a paid plan and split it back into its own `type: worker`
+service.
 
 1. Push this repo to GitHub (already done if you're reading this from
    there).
@@ -287,9 +297,9 @@ locally to deploy it.
    free tier — see [Environment variables](#environment-variables)); leave
    the rest blank if you're not using them (Google OAuth, YouTube Data API,
    Pinecone).
-4. Click **Apply**. Render provisions the database, Redis, backend, worker,
-   and frontend, running `alembic upgrade head` automatically before each
-   backend deploy (`preDeployCommand`).
+4. Click **Apply**. Render provisions the database, Redis, backend
+   (running `alembic upgrade head` before `uvicorn` starts on every
+   deploy), and frontend.
 5. If Render assigns the frontend a different subdomain than
    `yt-summarizer-frontend.onrender.com` (name already taken), update the
    backend's `CORS_ORIGINS` env var to match, and the frontend's
